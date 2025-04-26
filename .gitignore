@@ -41,4 +41,7 @@ dataset/
 # Logs
 *.log
 
+# Node.js
+node_modules/
+
 # Allow requirements.txt 
