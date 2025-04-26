@@ -39,4 +39,6 @@ dataset/
 *.txt
 
 # Logs
-*.log 
+*.log
+
+# Allow requirements.txt 
