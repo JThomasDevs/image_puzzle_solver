@@ -4,12 +4,36 @@ import json
 from pathlib import Path
 import numpy as np
 from ultralytics import YOLO
+import shutil
 
 class TrainingDataCollector:
     def __init__(self):
+        """Initialize the training data collector with YOLO model and directory setup.
+        
+        The collector uses YOLOv8 for initial object detection and provides tools for:
+        - Automatic object detection
+        - Manual bounding box annotation
+        - Crosswalk detection using computer vision
+        - Interactive adjustment of detections
+        
+        Directory structure:
+        - unprocessed/: Raw downloaded images
+        - annotated/: Images with visualized bounding boxes
+        - train/: Processed images with their annotations
+        """
         self.model = YOLO('yolov8n.pt')  # Use base model for initial labeling
         self.current_image = None
         self.annotations = []
+        
+        # Define base directories
+        self.base_dir = Path(__file__).parent.parent / 'backend' / 'data' / 'images'
+        self.unprocessed_dir = self.base_dir / 'unprocessed'
+        self.annotated_dir = self.base_dir / 'annotated'
+        self.train_dir = self.base_dir / 'train'
+        
+        # Create directories if they don't exist
+        self.annotated_dir.mkdir(parents=True, exist_ok=True)
+        self.train_dir.mkdir(parents=True, exist_ok=True)
         
         # Define the classes we're interested in
         self.target_classes = {
@@ -79,7 +103,31 @@ class TrainingDataCollector:
         return []
         
     def process_image(self, image_path: str):
-        """Process an image and help label objects"""
+        """Process and annotate an image with object detections.
+        
+        This is the main annotation workflow that:
+        1. Loads the image and runs YOLO detection
+        2. Detects crosswalks using computer vision
+        3. Displays current detections and options
+        4. Allows interactive editing of annotations
+        5. Saves the annotated image and detection labels
+        
+        The function provides an interactive interface for:
+        - Viewing current detections
+        - Adding new bounding boxes
+        - Removing incorrect detections
+        - Adjusting crosswalk boxes
+        - Saving or skipping images
+        
+        Args:
+            image_path (str): Path to the image file to process
+            
+        Returns:
+            bool: True if the image was processed and saved, False if skipped
+            
+        Raises:
+            ValueError: If the image cannot be loaded
+        """
         self.current_image = cv2.imread(image_path)
         if self.current_image is None:
             raise ValueError(f"Could not load image at {image_path}")
@@ -157,7 +205,21 @@ class TrainingDataCollector:
         return False
         
     def _save_detections(self, result, image_path, crosswalk_detections=None):
-        """Save detections in YOLO format"""
+        """Save object detections in YOLO format.
+        
+        Converts bounding box coordinates to YOLO format:
+        - Center x, center y (normalized 0-1)
+        - Width, height (normalized 0-1)
+        
+        Creates a text file with one line per detection:
+        <class_id> <x_center> <y_center> <width> <height>
+        
+        Args:
+            result: YOLO detection result object
+            image_path (str): Path to the original image
+            crosswalk_detections (list, optional): List of crosswalk detections in format
+                [(class_id, x_center, y_center, width, height), ...]
+        """
         # Convert to YOLO format
         height, width = self.current_image.shape[:2]
         labels = []
@@ -194,7 +256,21 @@ class TrainingDataCollector:
             print(f"Including {len(crosswalk_detections)} crosswalk detections")
         
     def _add_manual_box(self, image_path):
-        """Add a manual bounding box"""
+        """Add a manual bounding box annotation.
+        
+        Provides an interactive interface to:
+        1. Select object class from available classes
+        2. Input normalized coordinates (0-1 range):
+           - Center X, Y coordinates
+           - Box width and height
+        
+        The coordinates should be normalized to image dimensions:
+        - X coordinates: divided by image width
+        - Y coordinates: divided by image height
+        
+        Args:
+            image_path (str): Path to the image being annotated
+        """
         print("\nSelect object class:")
         for name, class_id in self.target_classes.items():
             print(f"{class_id}: {name}")
@@ -212,7 +288,17 @@ class TrainingDataCollector:
             f.write(f"\n{class_id} {x_center} {y_center} {width} {height}")
                 
     def _remove_detection(self, result, image_path):
-        """Remove a detection from the results"""
+        """Remove an incorrect detection.
+        
+        Provides an interface to:
+        1. List all current detections with class names
+        2. Select a detection to remove
+        3. Update and save the remaining detections
+        
+        Args:
+            result: YOLO detection result object
+            image_path (str): Path to the image being annotated
+        """
         print("\nSelect detection to remove:")
         for i, box in enumerate(result.boxes):
             class_id = int(box.cls)
@@ -229,7 +315,23 @@ class TrainingDataCollector:
         self._save_detections(result, image_path)
 
     def _adjust_crosswalk_box(self, crosswalk_detections):
-        """Adjust the dimensions of the crosswalk bounding box"""
+        """Adjust the dimensions of a crosswalk bounding box.
+        
+        Provides interactive adjustment of:
+        1. Box center position (x, y)
+        2. Box width
+        3. Box height
+        
+        All coordinates are normalized (0-1 range) relative to image dimensions.
+        Ensures adjusted values stay within valid bounds.
+        
+        Args:
+            crosswalk_detections (list): List of crosswalk detections in format
+                [(class_id, x_center, y_center, width, height), ...]
+                
+        Returns:
+            list: Updated crosswalk detections with adjusted coordinates
+        """
         if not crosswalk_detections:
             print("No crosswalk detection to adjust")
             return crosswalk_detections
@@ -270,13 +372,25 @@ class TrainingDataCollector:
 def main():
     collector = TrainingDataCollector()
     
-    # Process images in the dataset directory
-    dataset_dir = 'dataset/images/train'
-    for image_file in os.listdir(dataset_dir):
+    # Process images in the unprocessed directory
+    for image_file in os.listdir(collector.unprocessed_dir):
         if image_file.endswith(('.jpg', '.jpeg', '.png')) and not image_file.startswith('annotated_'):
-            image_path = os.path.join(dataset_dir, image_file)
+            image_path = os.path.join(collector.unprocessed_dir, image_file)
             print(f"\nProcessing {image_file}...")
             if collector.process_image(image_path):
+                # Move the processed image and its annotation to train directory
+                processed_img = Path(image_path)
+                annotation_file = processed_img.with_suffix('.txt')
+                
+                if annotation_file.exists():
+                    # Move image and annotation to train directory
+                    shutil.move(str(processed_img), str(collector.train_dir / processed_img.name))
+                    shutil.move(str(annotation_file), str(collector.train_dir / annotation_file.name))
+                    
+                    # Move annotated version to annotated directory
+                    annotated_img = processed_img.parent / f'annotated_{processed_img.name}'
+                    if annotated_img.exists():
+                        shutil.move(str(annotated_img), str(collector.annotated_dir / annotated_img.name))
                 break
 
 if __name__ == '__main__':
