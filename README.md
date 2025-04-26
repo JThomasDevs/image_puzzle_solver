@@ -2,20 +2,46 @@
 
 A tool for detecting and labeling objects in images, with special focus on crosswalk detection. This project uses YOLO for object detection and custom image processing for crosswalk detection.
 
+## Project Structure
+
+```
+image_puzzle_solver/
+├── backend/               # Core detection and processing logic
+│   ├── core/             # Core functionality
+│   │   └── detector.py   # Object detection implementation
+│   └── utils/            # Utility functions
+├── api/                  # FastAPI backend API
+│   ├── app/
+│   │   ├── main.py      # FastAPI application
+│   │   ├── models.py    # Pydantic models
+│   │   └── routes/      # API endpoints
+│   └── run.py           # API server runner
+└── frontend/            # React frontend
+    ├── public/          # Static files
+    └── src/             # React components and logic
+```
+
 ## Features
 
 - Object detection using YOLOv8
 - Custom crosswalk detection using image processing techniques
-- Interactive labeling interface
-- Adjustable bounding boxes
+- RESTful API for image processing
+- Interactive web interface for image annotation
 - YOLO format label output
 
 ## Requirements
 
+### Backend
 - Python 3.x
 - OpenCV
 - Ultralytics (YOLOv8)
+- FastAPI
 - NumPy
+
+### Frontend
+- Node.js
+- React
+- Material-UI
 
 ## Installation
 
@@ -25,37 +51,40 @@ git clone <repository-url>
 cd image_puzzle_solver
 ```
 
-2. Create and activate a virtual environment:
+2. Set up the backend:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-3. Install dependencies:
+3. Set up the frontend:
 ```bash
-pip install -r requirements.txt
+cd frontend
+npm install
 ```
 
 ## Usage
 
-Run the labeling script:
+1. Start the API server:
 ```bash
-python collect_training_data.py
+cd api
+python run.py
 ```
 
-The script will:
-1. Process images in the dataset directory
-2. Detect objects using YOLO
-3. Detect crosswalks using custom image processing
-4. Allow interactive adjustment of detections
-5. Save annotations in YOLO format
+2. Start the frontend development server:
+```bash
+cd frontend
+npm start
+```
 
-## Project Structure
+The web interface will be available at http://localhost:3000, and the API at http://localhost:8000.
 
-- `collect_training_data.py`: Main script for image processing and labeling
-- `dataset/`: Directory containing training images and labels
-  - `images/train/`: Training images
-  - `labels/train/`: YOLO format labels
+## API Endpoints
+
+- `GET /api/v1/images` - List all available images
+- `GET /api/v1/images/{image_name}` - Get detections for a specific image
+- `PUT /api/v1/images/{image_name}` - Update detections for a specific image
 
 ## License
 
