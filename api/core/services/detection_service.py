@@ -97,16 +97,15 @@ async def process_image(image_b64: Optional[str] = None, image_path: Optional[st
                 }
         else:
             # Handle direct file path
-            temp_path = str(UNPROCESSED_DIR / image_path)
-            if not os.path.exists(temp_path):
-                raise HTTPException(status_code=404, detail=f"Image not found at {temp_path}")
-            logging.info(f"Using image at {temp_path}")
+            if not os.path.exists(image_path):
+                raise HTTPException(status_code=404, detail=f"Image not found at {image_path}")
+            logging.info(f"Using image at {image_path}")
 
             # Process image using detector
-            detections = detector.process_image(temp_path)
+            detections = detector.process_image(image_path)
             
             # Find the annotated image in the annotated directory
-            annotated_path = ANNOTATED_DIR / ('annotated_' + image_path)
+            annotated_path = ANNOTATED_DIR / ('annotated_' + Path(image_path).name)
             if not os.path.exists(annotated_path):
                 raise HTTPException(status_code=500, detail=f"Annotated image not found at {annotated_path}")
             
@@ -133,7 +132,10 @@ async def process_image(image_b64: Optional[str] = None, image_path: Optional[st
 
 async def detect_objects(image_name: str) -> Dict:
     """Run object detection on an image"""
-    return await process_image(image_path=image_name)
+    image_path = str(UNPROCESSED_DIR / image_name)
+    if not Path(image_path).exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return await process_image(image_path=image_path)
 
 async def get_classes() -> Dict:
     """Get available object classes"""

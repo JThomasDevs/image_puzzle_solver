@@ -8,7 +8,7 @@ from .endpoints import images, detection
 app = FastAPI(
     title="Image Puzzle Solver API",
     description="API layer for the Image Puzzle Solver application",
-    version="0.1.0"
+    version="0.1.5"
 )
 
 # Configure CORS

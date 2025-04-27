@@ -78,5 +78,6 @@ async def save_annotations(image_name: str, annotations: List[Dict]) -> Dict:
     ]
     
     # Save detections
-    label_path = detector.save_detections(str(image_path), detections)
+    label_path = str(image_path.with_suffix('.txt'))
+    detector.save_detections(detections, label_path)
     return {"message": "Annotations saved successfully", "label_path": label_path} 
