@@ -122,43 +122,80 @@ class ImageAnnotator:
         Returns:
             tuple: (bool, list) - Success flag and list of annotations
         """
-        self.current_image = cv2.imread(image_path)
-        if self.current_image is None:
-            raise ValueError(f"Could not load image at {image_path}")
-            
-        results = self.model(self.current_image)
-        crosswalk_detections = self.detect_crosswalk(self.current_image)
-        
-        while True:
-            annotated_image = self._create_annotated_image(results[0], crosswalk_detections)
-            
-            # Save annotated image to the correct directory
-            if self.annotated_dir:
-                annotated_path = self.annotated_dir / f'annotated_{Path(image_path).name}'
-            else:
-                annotated_path = Path(image_path).with_name('annotated_' + Path(image_path).name)
+        try:
+            self.current_image = cv2.imread(image_path)
+            if self.current_image is None:
+                raise ValueError(f"Could not load image at {image_path}")
                 
-            cv2.imwrite(str(annotated_path), annotated_image)
-            print(f"\nSaved annotated image to: {annotated_path}")
+            results = self.model(self.current_image)
+            crosswalk_detections = self.detect_crosswalk(self.current_image)
             
-            self._display_detections(results[0], crosswalk_detections)
-            choice = self._get_user_choice()
-            
-            if choice == '1':
-                annotations = self._save_detections(results[0], image_path, crosswalk_detections)
-                return True, annotations
-            elif choice == '2':
-                self._add_manual_box(image_path)
-            elif choice == '3':
-                self._remove_detection(results[0], image_path)
-            elif choice == '4':
-                crosswalk_detections = self._adjust_crosswalk_box(crosswalk_detections)
-            elif choice == '5':
-                return False, []
-            elif choice == '6':
-                annotations = self._save_detections(results[0], image_path, crosswalk_detections)
-                return True, annotations
-        
+            while True:
+                annotated_image = self._create_annotated_image(results[0], crosswalk_detections)
+                
+                # Save annotated image to the correct directory
+                if self.annotated_dir:
+                    annotated_path = self.annotated_dir / f'annotated_{Path(image_path).name}'
+                else:
+                    annotated_path = Path(image_path).with_name('annotated_' + Path(image_path).name)
+                    
+                cv2.imwrite(str(annotated_path), annotated_image)
+                print(f"\nSaved annotated image to: {annotated_path}")
+                
+                # Display current detections
+                print("\nCurrent detections:")
+                for i, box in enumerate(results[0].boxes):
+                    class_id = int(box.cls)
+                    class_name = self.model.names[class_id]
+                    confidence = float(box.conf)
+                    print(f"{i}: {class_name} (confidence: {confidence:.2f})")
+                    
+                if crosswalk_detections:
+                    print("\nCrosswalk bounding box:")
+                    for i, (class_id, x_center, y_center, width, height) in enumerate(crosswalk_detections):
+                        print(f"Box {i}: Center ({x_center:.2f}, {y_center:.2f}), Size ({width:.2f}, {height:.2f})")
+                
+                # Get user choice
+                print("\nOptions:")
+                print("1. Keep all detections")
+                print("2. Add new bounding box")
+                print("3. Remove detection")
+                print("4. Adjust crosswalk box")
+                print("5. Skip image")
+                print("6. Save and move to next")
+                print("q. Quit annotation")
+                
+                try:
+                    choice = input("Enter your choice (1-6 or q): ").lower()
+                except KeyboardInterrupt:
+                    print("\nAnnotation interrupted. Skipping image.")
+                    return False, []
+                
+                if choice == 'q':
+                    print("\nQuitting annotation process.")
+                    return False, []
+                elif choice == '1':
+                    annotations = self._save_detections(results[0], image_path, crosswalk_detections)
+                    return True, annotations
+                elif choice == '2':
+                    self._add_manual_box(image_path)
+                elif choice == '3':
+                    self._remove_detection(results[0], image_path)
+                elif choice == '4':
+                    crosswalk_detections = self._adjust_crosswalk_box(crosswalk_detections)
+                elif choice == '5':
+                    return False, []
+                elif choice == '6':
+                    annotations = self._save_detections(results[0], image_path, crosswalk_detections)
+                    return True, annotations
+                
+        except KeyboardInterrupt:
+            print("\nAnnotation interrupted. Skipping image.")
+            return False, []
+        except Exception as e:
+            print(f"\nError processing {Path(image_path).name}: {str(e)}")
+            return False, []
+    
     def _create_annotated_image(self, result, crosswalk_detections):
         """Create a visualization of all detections on the image.
         
