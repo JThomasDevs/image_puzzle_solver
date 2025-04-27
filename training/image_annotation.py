@@ -19,14 +19,16 @@ class ImageAnnotator:
     with all coordinates normalized to the YOLO format (0-1 range).
     """
     
-    def __init__(self, model_path='yolov8n.pt'):
+    def __init__(self, model_path='yolov8n.pt', annotated_dir=None):
         """Initialize the annotator with a YOLO model.
         
         Args:
             model_path (str): Path to the YOLO model weights
+            annotated_dir (Path, optional): Directory to save annotated images
         """
         self.model = YOLO(model_path)
         self.current_image = None
+        self.annotated_dir = Path(annotated_dir) if annotated_dir else None
         
         # Define the classes we're interested in
         self.target_classes = {
@@ -129,8 +131,15 @@ class ImageAnnotator:
         
         while True:
             annotated_image = self._create_annotated_image(results[0], crosswalk_detections)
-            annotated_path = str(Path(image_path).with_name('annotated_' + Path(image_path).name))
-            cv2.imwrite(annotated_path, annotated_image)
+            
+            # Save annotated image to the correct directory
+            if self.annotated_dir:
+                annotated_path = self.annotated_dir / f'annotated_{Path(image_path).name}'
+            else:
+                annotated_path = Path(image_path).with_name('annotated_' + Path(image_path).name)
+                
+            cv2.imwrite(str(annotated_path), annotated_image)
+            print(f"\nSaved annotated image to: {annotated_path}")
             
             self._display_detections(results[0], crosswalk_detections)
             choice = self._get_user_choice()
@@ -374,7 +383,8 @@ class ImageProcessor:
         for dir_path in [self.unprocessed_dir, self.annotated_dir, self.train_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
         
-        self.annotator = ImageAnnotator()
+        # Initialize annotator with the correct annotated directory
+        self.annotator = ImageAnnotator(annotated_dir=self.annotated_dir)
     
     def process_images(self):
         """Process all unprocessed images with annotations.
@@ -404,7 +414,9 @@ class ImageProcessor:
         Moves:
         - Original image -> train directory
         - Annotation file -> train directory
-        - Annotated image -> annotated directory
+        
+        Note: Annotated images are now saved directly to the annotated directory
+        by the ImageAnnotator
         
         Args:
             image_path (str): Path to the processed image
@@ -416,11 +428,6 @@ class ImageProcessor:
             # Move files to appropriate directories
             shutil.move(str(processed_img), str(self.train_dir / processed_img.name))
             shutil.move(str(annotation_file), str(self.train_dir / annotation_file.name))
-            
-            # Move annotated version
-            annotated_img = processed_img.parent / f'annotated_{processed_img.name}'
-            if annotated_img.exists():
-                shutil.move(str(annotated_img), str(self.annotated_dir / annotated_img.name))
 
 def main():
     processor = ImageProcessor()
