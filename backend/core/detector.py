@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import numpy as np
 from ultralytics import YOLO
+import logging
 
 class ObjectDetector:
     def __init__(self):
@@ -76,6 +77,10 @@ class ObjectDetector:
         
     def process_image(self, image_path: str):
         """Process an image and return detections with class names"""
+        # Convert to absolute path in backend/data/images/unprocessed
+        if not os.path.isabs(image_path):
+            image_path = str(Path(__file__).parent.parent / 'data' / 'images' / 'unprocessed' / image_path)
+            
         self.current_image = cv2.imread(image_path)
         if self.current_image is None:
             raise ValueError(f"Could not load image at {image_path}")
@@ -105,7 +110,8 @@ class ObjectDetector:
                     'x_center': x_center,
                     'y_center': y_center,
                     'width': box_width,
-                    'height': box_height
+                    'height': box_height,
+                    'confidence': float(box.conf[0])
                 })
         
         # Add crosswalk detections
@@ -117,7 +123,8 @@ class ObjectDetector:
                 'x_center': det[1],
                 'y_center': det[2],
                 'width': det[3],
-                'height': det[4]
+                'height': det[4],
+                'confidence': 1.0
             })
             
         # Create annotated image
@@ -140,15 +147,18 @@ class ObjectDetector:
             # Draw rectangle
             cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
             
-            # Add label
-            label = det['class_name']
+            # Add label with confidence
+            label = f"{det['class_name']} ({det['confidence']:.2f})"
             label_y = max(20, y1 - 10)  # Keep label at least 20px from top
             cv2.putText(annotated_image, label, (x1, label_y), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         
-        # Save annotated image
-        annotated_path = str(Path(image_path).with_name('annotated_' + Path(image_path).name))
-        cv2.imwrite(annotated_path, annotated_image)
+        # Save annotated image in the annotated directory
+        annotated_dir = Path(__file__).parent.parent / 'data' / 'images' / 'annotated'
+        annotated_dir.mkdir(parents=True, exist_ok=True)
+        annotated_path = annotated_dir / ('annotated_' + Path(image_path).name)
+        cv2.imwrite(str(annotated_path), annotated_image)
+        logging.info(f"Saved annotated image to {annotated_path}")
         
         return detections
         
