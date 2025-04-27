@@ -6,34 +6,27 @@ import numpy as np
 from ultralytics import YOLO
 import shutil
 
-class TrainingDataCollector:
-    def __init__(self):
-        """Initialize the training data collector with YOLO model and directory setup.
+class ImageAnnotator:
+    """Handles the annotation of images with bounding boxes.
+    
+    This class provides tools for:
+    - Automatic object detection using YOLO
+    - Manual bounding box annotation
+    - Crosswalk detection using computer vision
+    - Interactive adjustment of detections
+    
+    The annotation process supports both automatic detection and manual refinement,
+    with all coordinates normalized to the YOLO format (0-1 range).
+    """
+    
+    def __init__(self, model_path='yolov8n.pt'):
+        """Initialize the annotator with a YOLO model.
         
-        The collector uses YOLOv8 for initial object detection and provides tools for:
-        - Automatic object detection
-        - Manual bounding box annotation
-        - Crosswalk detection using computer vision
-        - Interactive adjustment of detections
-        
-        Directory structure:
-        - unprocessed/: Raw downloaded images
-        - annotated/: Images with visualized bounding boxes
-        - train/: Processed images with their annotations
+        Args:
+            model_path (str): Path to the YOLO model weights
         """
-        self.model = YOLO('yolov8n.pt')  # Use base model for initial labeling
+        self.model = YOLO(model_path)
         self.current_image = None
-        self.annotations = []
-        
-        # Define base directories
-        self.base_dir = Path(__file__).parent.parent / 'backend' / 'data' / 'images'
-        self.unprocessed_dir = self.base_dir / 'unprocessed'
-        self.annotated_dir = self.base_dir / 'annotated'
-        self.train_dir = self.base_dir / 'train'
-        
-        # Create directories if they don't exist
-        self.annotated_dir.mkdir(parents=True, exist_ok=True)
-        self.train_dir.mkdir(parents=True, exist_ok=True)
         
         # Define the classes we're interested in
         self.target_classes = {
@@ -46,11 +39,21 @@ class TrainingDataCollector:
             'traffic light': 9,
             'fire hydrant': 10,
             'stop sign': 11,
-            'crosswalk': 12  # Added crosswalk as a new class
+            'crosswalk': 12
         }
-        
+    
     def detect_crosswalk(self, image):
-        """Detect crosswalk using image processing techniques"""
+        """Detect crosswalk using image processing techniques.
+        
+        Uses edge detection and line detection to identify potential crosswalks
+        in the image based on parallel line patterns.
+        
+        Args:
+            image (np.ndarray): Input image in BGR format
+            
+        Returns:
+            list: Detected crosswalks in format [(class_id, x_center, y_center, width, height), ...]
+        """
         # Convert to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
@@ -102,94 +105,39 @@ class TrainingDataCollector:
         
         return []
         
-    def process_image(self, image_path: str):
-        """Process and annotate an image with object detections.
+    def annotate_image(self, image_path: str):
+        """Annotate an image with bounding boxes.
         
-        This is the main annotation workflow that:
-        1. Loads the image and runs YOLO detection
-        2. Detects crosswalks using computer vision
-        3. Displays current detections and options
-        4. Allows interactive editing of annotations
-        5. Saves the annotated image and detection labels
-        
-        The function provides an interactive interface for:
-        - Viewing current detections
-        - Adding new bounding boxes
-        - Removing incorrect detections
-        - Adjusting crosswalk boxes
-        - Saving or skipping images
+        Main annotation workflow:
+        1. Load image and run YOLO detection
+        2. Detect crosswalks
+        3. Allow interactive editing of annotations
+        4. Save results
         
         Args:
-            image_path (str): Path to the image file to process
+            image_path (str): Path to the image to annotate
             
         Returns:
-            bool: True if the image was processed and saved, False if skipped
-            
-        Raises:
-            ValueError: If the image cannot be loaded
+            tuple: (bool, list) - Success flag and list of annotations
         """
         self.current_image = cv2.imread(image_path)
         if self.current_image is None:
             raise ValueError(f"Could not load image at {image_path}")
             
-        # Run initial detection
         results = self.model(self.current_image)
-        
-        # Detect crosswalks
         crosswalk_detections = self.detect_crosswalk(self.current_image)
         
         while True:
-            # Save annotated image
-            annotated_image = results[0].plot()
-            
-            # Draw crosswalk detections
-            for class_id, x_center, y_center, width, height in crosswalk_detections:
-                height_img, width_img = self.current_image.shape[:2]
-                
-                # Calculate box coordinates
-                x1 = max(0, int((x_center - width/2) * width_img))
-                y1 = max(0, int((y_center - height/2) * height_img))
-                x2 = min(width_img, int((x_center + width/2) * width_img))
-                y2 = min(height_img, int((y_center + height/2) * height_img))
-                
-                # Draw rectangle
-                cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                
-                # Calculate label position (ensure it's within image bounds)
-                label_y = max(20, y1 - 10)  # Keep label at least 20px from top
-                cv2.putText(annotated_image, 'crosswalk', (x1, label_y), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-            
+            annotated_image = self._create_annotated_image(results[0], crosswalk_detections)
             annotated_path = str(Path(image_path).with_name('annotated_' + Path(image_path).name))
             cv2.imwrite(annotated_path, annotated_image)
-            print(f"\nSaved annotated image to: {annotated_path}")
             
-            # Get user input for corrections
-            print("\nCurrent detections:")
-            for i, box in enumerate(results[0].boxes):
-                class_id = int(box.cls)
-                class_name = self.model.names[class_id]
-                confidence = float(box.conf)
-                print(f"{i}: {class_name} (confidence: {confidence:.2f})")
-                
-            if crosswalk_detections:
-                print("\nCrosswalk bounding box:")
-                for i, (class_id, x_center, y_center, width, height) in enumerate(crosswalk_detections):
-                    print(f"Box {i}: Center ({x_center:.2f}, {y_center:.2f}), Size ({width:.2f}, {height:.2f})")
-            
-            print("\nOptions:")
-            print("1. Keep all detections")
-            print("2. Add new bounding box")
-            print("3. Remove detection")
-            print("4. Adjust crosswalk box")
-            print("5. Skip image")
-            print("6. Save and move to next")
-            
-            choice = input("Enter your choice (1-6): ")
+            self._display_detections(results[0], crosswalk_detections)
+            choice = self._get_user_choice()
             
             if choice == '1':
-                self._save_detections(results[0], image_path, crosswalk_detections)
-                break
+                annotations = self._save_detections(results[0], image_path, crosswalk_detections)
+                return True, annotations
             elif choice == '2':
                 self._add_manual_box(image_path)
             elif choice == '3':
@@ -197,13 +145,37 @@ class TrainingDataCollector:
             elif choice == '4':
                 crosswalk_detections = self._adjust_crosswalk_box(crosswalk_detections)
             elif choice == '5':
-                return
+                return False, []
             elif choice == '6':
-                self._save_detections(results[0], image_path, crosswalk_detections)
-                return True
-                
-        return False
+                annotations = self._save_detections(results[0], image_path, crosswalk_detections)
+                return True, annotations
         
+    def _create_annotated_image(self, result, crosswalk_detections):
+        """Create a visualization of all detections on the image.
+        
+        Args:
+            result: YOLO detection result
+            crosswalk_detections: List of crosswalk detections
+            
+        Returns:
+            np.ndarray: Image with drawn bounding boxes
+        """
+        annotated_image = result.plot()
+        
+        # Draw crosswalk detections
+        for class_id, x_center, y_center, width, height in crosswalk_detections:
+            height_img, width_img = self.current_image.shape[:2]
+            x1 = max(0, int((x_center - width/2) * width_img))
+            y1 = max(0, int((y_center - height/2) * height_img))
+            x2 = min(width_img, int((x_center + width/2) * width_img))
+            y2 = min(height_img, int((y_center + height/2) * height_img))
+            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            label_y = max(20, y1 - 10)
+            cv2.putText(annotated_image, 'crosswalk', (x1, label_y), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        
+        return annotated_image
+    
     def _save_detections(self, result, image_path, crosswalk_detections=None):
         """Save object detections in YOLO format.
         
@@ -254,6 +226,8 @@ class TrainingDataCollector:
         print(f"\nSaved {len(labels)} detections to {label_path}")
         if crosswalk_detections:
             print(f"Including {len(crosswalk_detections)} crosswalk detections")
+        
+        return labels
         
     def _add_manual_box(self, image_path):
         """Add a manual bounding box annotation.
@@ -369,29 +343,88 @@ class TrainingDataCollector:
         
         return [(class_id, x_center, y_center, width, height)]
 
-def main():
-    collector = TrainingDataCollector()
+class ImageProcessor:
+    """Manages the processing and organization of training images.
     
-    # Process images in the unprocessed directory
-    for image_file in os.listdir(collector.unprocessed_dir):
-        if image_file.endswith(('.jpg', '.jpeg', '.png')) and not image_file.startswith('annotated_'):
-            image_path = os.path.join(collector.unprocessed_dir, image_file)
-            print(f"\nProcessing {image_file}...")
-            if collector.process_image(image_path):
-                # Move the processed image and its annotation to train directory
-                processed_img = Path(image_path)
-                annotation_file = processed_img.with_suffix('.txt')
+    This class handles:
+    - Directory structure management
+    - Image processing workflow coordination
+    - File organization and movement between directories
+    - Integration with ImageAnnotator for annotation
+    
+    Note: This class does not handle the actual collection/downloading of images.
+    For image collection, see download_training_images.py
+    """
+    
+    def __init__(self, base_dir=None):
+        """Initialize the image processor with directory structure.
+        
+        Args:
+            base_dir (Path, optional): Base directory for image processing
+        """
+        if base_dir is None:
+            base_dir = Path(__file__).parent.parent / 'backend' / 'data' / 'images'
+        
+        self.base_dir = Path(base_dir)
+        self.unprocessed_dir = self.base_dir / 'unprocessed'
+        self.annotated_dir = self.base_dir / 'annotated'
+        self.train_dir = self.base_dir / 'train'
+        
+        # Create directories
+        for dir_path in [self.unprocessed_dir, self.annotated_dir, self.train_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        
+        self.annotator = ImageAnnotator()
+    
+    def process_images(self):
+        """Process all unprocessed images with annotations.
+        
+        Workflow:
+        1. Find images in the unprocessed directory
+        2. For each image:
+           - Run it through annotation process
+           - If successfully annotated, organize files into appropriate directories
+           - Handle any errors during processing
+        """
+        for image_file in os.listdir(self.unprocessed_dir):
+            if image_file.endswith(('.jpg', '.jpeg', '.png')) and not image_file.startswith('annotated_'):
+                image_path = os.path.join(self.unprocessed_dir, image_file)
+                print(f"\nProcessing {image_file}...")
                 
-                if annotation_file.exists():
-                    # Move image and annotation to train directory
-                    shutil.move(str(processed_img), str(collector.train_dir / processed_img.name))
-                    shutil.move(str(annotation_file), str(collector.train_dir / annotation_file.name))
-                    
-                    # Move annotated version to annotated directory
-                    annotated_img = processed_img.parent / f'annotated_{processed_img.name}'
-                    if annotated_img.exists():
-                        shutil.move(str(annotated_img), str(collector.annotated_dir / annotated_img.name))
-                break
+                try:
+                    success, annotations = self.annotator.annotate_image(image_path)
+                    if success:
+                        self._organize_files(image_path)
+                except Exception as e:
+                    print(f"Error processing {image_file}: {str(e)}")
+    
+    def _organize_files(self, image_path):
+        """Organize processed files into appropriate directories.
+        
+        Moves:
+        - Original image -> train directory
+        - Annotation file -> train directory
+        - Annotated image -> annotated directory
+        
+        Args:
+            image_path (str): Path to the processed image
+        """
+        processed_img = Path(image_path)
+        annotation_file = processed_img.with_suffix('.txt')
+        
+        if annotation_file.exists():
+            # Move files to appropriate directories
+            shutil.move(str(processed_img), str(self.train_dir / processed_img.name))
+            shutil.move(str(annotation_file), str(self.train_dir / annotation_file.name))
+            
+            # Move annotated version
+            annotated_img = processed_img.parent / f'annotated_{processed_img.name}'
+            if annotated_img.exists():
+                shutil.move(str(annotated_img), str(self.annotated_dir / annotated_img.name))
+
+def main():
+    processor = ImageProcessor()
+    processor.process_images()
 
 if __name__ == '__main__':
     main() 

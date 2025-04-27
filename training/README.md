@@ -5,14 +5,14 @@ This directory contains scripts for training and preparing the puzzle solver mod
 ## Files
 
 - `download_training_images.py`: Downloads training images using DuckDuckGo search
-- `collect_training_data.py`: Processes and labels training data, including custom crosswalk detection
+- `image_annotation.py`: Handles image annotation and processing, including custom crosswalk detection
 - `train_puzzle_model.py`: Trains the YOLO model on the collected data
 - `split_dataset.py`: Utility for splitting the dataset into train/val/test sets
 
 ## Training Process
 
 1. Use `download_training_images.py` to collect training images
-2. Use `collect_training_data.py` to label the images
+2. Use `image_annotation.py` to annotate and process the images
 3. Use `split_dataset.py` to split the data into train/val/test sets
 4. Use `train_puzzle_model.py` to train the model
 
