@@ -14,8 +14,12 @@ from backend.core.detector import ObjectDetector
 detector = ObjectDetector()
 
 # Define paths
-UNPROCESSED_DIR = Path(__file__).parent.parent.parent.parent / "backend" / "data" / "images" / "unprocessed"
-ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "backend" / "data" / "images" / "annotated"
+UNPROCESSED_DIR = Path(__file__).parent.parent.parent.parent / "data" / "images" / "unprocessed"
+ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "data" / "images" / "annotated"
+
+# Create directories if they don't exist
+UNPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)
 
 @contextlib.contextmanager
 def temp_image_file(image_bytes=None):

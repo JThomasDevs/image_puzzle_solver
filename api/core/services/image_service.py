@@ -10,7 +10,7 @@ from backend.core.detector import ObjectDetector
 detector = ObjectDetector()
 
 # Define paths
-DATASET_DIR = Path(__file__).parent.parent.parent.parent / "backend" / "data" / "images" / "train"
+DATASET_DIR = Path(__file__).parent.parent.parent.parent / "data" / "images" / "unprocessed"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 async def list_images() -> List[str]:

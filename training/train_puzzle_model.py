@@ -6,7 +6,7 @@ from pathlib import Path
 def create_dataset_yaml():
     """Create the dataset configuration YAML file for YOLO training"""
     data = {
-        'path': 'dataset',  # dataset root dir
+        'path': 'data',  # dataset root dir
         'train': 'images/train',  # train images
         'val': 'images/val',  # val images
         'test': 'images/test',  # test images
@@ -24,7 +24,7 @@ def create_dataset_yaml():
         }
     }
     
-    with open('dataset.yaml', 'w') as f:
+    with open('data.yaml', 'w') as f:
         yaml.dump(data, f, default_flow_style=False)
 
 def train_model():
@@ -37,7 +37,7 @@ def train_model():
     
     # Train the model
     results = model.train(
-        data='dataset.yaml',
+        data='data.yaml',
         epochs=100,
         imgsz=640,
         batch=16,
@@ -51,12 +51,12 @@ def train_model():
 
 if __name__ == '__main__':
     # Create necessary directories
-    os.makedirs('dataset/images/train', exist_ok=True)
-    os.makedirs('dataset/images/val', exist_ok=True)
-    os.makedirs('dataset/images/test', exist_ok=True)
-    os.makedirs('dataset/labels/train', exist_ok=True)
-    os.makedirs('dataset/labels/val', exist_ok=True)
-    os.makedirs('dataset/labels/test', exist_ok=True)
+    os.makedirs('data/images/train', exist_ok=True)
+    os.makedirs('data/images/val', exist_ok=True)
+    os.makedirs('data/images/test', exist_ok=True)
+    os.makedirs('data/labels/train', exist_ok=True)
+    os.makedirs('data/labels/val', exist_ok=True)
+    os.makedirs('data/labels/test', exist_ok=True)
     
     # Train the model
     results = train_model()

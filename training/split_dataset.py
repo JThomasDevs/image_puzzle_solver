@@ -3,7 +3,7 @@ import random
 import shutil
 from pathlib import Path
 
-def split_dataset(train_dir='dataset/images/train', val_dir='dataset/images/val', val_split=0.2):
+def split_dataset(train_dir='data/images/train', val_dir='data/images/val', val_split=0.2):
     """Split the dataset into training and validation sets"""
     # Create validation directory if it doesn't exist
     os.makedirs(val_dir, exist_ok=True)

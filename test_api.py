@@ -20,8 +20,8 @@ def save_base64_image(base64_str, output_path):
 
 def get_unannotated_image():
     """Find a random unannotated image from the unprocessed directory"""
-    unprocessed_dir = Path("backend/data/images/unprocessed")
-    annotated_dir = Path("backend/data/images/annotated")
+    unprocessed_dir = Path("data/images/unprocessed")
+    annotated_dir = Path("data/images/annotated")
     
     # Get all unprocessed images
     unprocessed_images = [f for f in unprocessed_dir.glob("*.jpg") if not f.name.startswith("annotated_")]
@@ -63,7 +63,7 @@ def process_image(image_path):
             return
             
         # Create output directory if it doesn't exist
-        output_dir = "backend/data/images/annotated"
+        output_dir = "data/images/annotated"
         os.makedirs(output_dir, exist_ok=True)
         
         # Generate output filename

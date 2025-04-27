@@ -9,7 +9,7 @@ import tempfile
 class ObjectDetector:
     def __init__(self):
         # Get the path to the model file relative to this file
-        model_path = Path(__file__).parent.parent / 'yolov8n.pt'
+        model_path = Path(__file__).parent.parent.parent / 'yolov8n.pt'
         self.model = YOLO(str(model_path))
         self.current_image = None
         
@@ -30,9 +30,16 @@ class ObjectDetector:
         # Create reverse mapping for class names
         self.class_names = {v: k for k, v in self.target_classes.items()}
         
-        # Define dataset path
-        self.dataset_dir = Path(__file__).parent.parent / 'data' / 'images' / 'train'
-        self.dataset_dir.mkdir(parents=True, exist_ok=True)
+        # Define paths
+        self.base_dir = Path(__file__).parent.parent.parent / 'data'
+        self.unprocessed_dir = self.base_dir / 'images' / 'unprocessed'
+        self.annotated_dir = self.base_dir / 'images' / 'annotated'
+        self.train_dir = self.base_dir / 'images' / 'train'
+        
+        # Create directories if they don't exist
+        self.unprocessed_dir.mkdir(parents=True, exist_ok=True)
+        self.annotated_dir.mkdir(parents=True, exist_ok=True)
+        self.train_dir.mkdir(parents=True, exist_ok=True)
         
     def get_class_name(self, class_id: int) -> str:
         """Convert a class ID back to its string name"""
@@ -78,9 +85,9 @@ class ObjectDetector:
         
     def process_image(self, image_path: str):
         """Process an image and return detections with class names"""
-        # Convert to absolute path in backend/data/images/unprocessed
+        # Convert to absolute path in data/images/unprocessed
         if not os.path.isabs(image_path):
-            image_path = str(Path(__file__).parent.parent / 'data' / 'images' / 'unprocessed' / image_path)
+            image_path = str(self.unprocessed_dir / image_path)
             
         self.current_image = cv2.imread(image_path)
         if self.current_image is None:
@@ -155,20 +162,8 @@ class ObjectDetector:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         
         # Save annotated image in the annotated directory
-        annotated_dir = Path(__file__).parent.parent / 'data' / 'images' / 'annotated'
-        annotated_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Extract original image name, handling both regular paths and temp files
         image_name = Path(image_path).name
-        if image_name.startswith('tmp'):
-            # If it's a temp file, try to get the original name from the unprocessed directory
-            unprocessed_dir = Path(__file__).parent.parent / 'data' / 'images' / 'unprocessed'
-            for file in unprocessed_dir.glob('*.jpg'):
-                if not file.name.startswith('annotated_'):
-                    image_name = file.name
-                    break
-        
-        annotated_path = annotated_dir / ('annotated_' + image_name)
+        annotated_path = self.annotated_dir / ('annotated_' + image_name)
         cv2.imwrite(str(annotated_path), annotated_image)
         logging.info(f"Saved annotated image to {annotated_path}")
         
