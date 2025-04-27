@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 from ultralytics import YOLO
 import logging
+import tempfile
 
 class ObjectDetector:
     def __init__(self):
@@ -156,7 +157,18 @@ class ObjectDetector:
         # Save annotated image in the annotated directory
         annotated_dir = Path(__file__).parent.parent / 'data' / 'images' / 'annotated'
         annotated_dir.mkdir(parents=True, exist_ok=True)
-        annotated_path = annotated_dir / ('annotated_' + Path(image_path).name)
+        
+        # Extract original image name, handling both regular paths and temp files
+        image_name = Path(image_path).name
+        if image_name.startswith('tmp'):
+            # If it's a temp file, try to get the original name from the unprocessed directory
+            unprocessed_dir = Path(__file__).parent.parent / 'data' / 'images' / 'unprocessed'
+            for file in unprocessed_dir.glob('*.jpg'):
+                if not file.name.startswith('annotated_'):
+                    image_name = file.name
+                    break
+        
+        annotated_path = annotated_dir / ('annotated_' + image_name)
         cv2.imwrite(str(annotated_path), annotated_image)
         logging.info(f"Saved annotated image to {annotated_path}")
         

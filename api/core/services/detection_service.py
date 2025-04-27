@@ -5,6 +5,7 @@ import base64
 import tempfile
 import os
 import logging
+import contextlib
 
 # Import backend functionality
 from backend.core.detector import ObjectDetector
@@ -15,6 +16,32 @@ detector = ObjectDetector()
 # Define paths
 UNPROCESSED_DIR = Path(__file__).parent.parent.parent.parent / "backend" / "data" / "images" / "unprocessed"
 ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "backend" / "data" / "images" / "annotated"
+
+@contextlib.contextmanager
+def temp_image_file(image_bytes=None):
+    """Context manager for handling temporary image files"""
+    temp_path = None
+    try:
+        if image_bytes:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                temp_file.write(image_bytes)
+                temp_path = temp_file.name
+            yield temp_path
+        else:
+            yield None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+def get_original_image_name(image_path: str) -> str:
+    """Get the original image name from a path, handling both regular paths and temp files"""
+    image_name = Path(image_path).name
+    if image_name.startswith('tmp'):
+        # If it's a temp file, try to get the original name from the unprocessed directory
+        for file in UNPROCESSED_DIR.glob('*.jpg'):
+            if not file.name.startswith('annotated_'):
+                return file.name
+    return image_name
 
 async def process_image(image_b64: Optional[str] = None, image_path: Optional[str] = None, processing_params: Optional[Dict] = None) -> Dict:
     """Process an image and return detections with annotated image.
@@ -35,44 +62,65 @@ async def process_image(image_b64: Optional[str] = None, image_path: Optional[st
         if image_b64:
             # Handle base64 image
             image_bytes = base64.b64decode(image_b64)
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-                temp_file.write(image_bytes)
-                temp_path = temp_file.name
-            logging.info(f"Saved uploaded image to {temp_path}")
+            with temp_image_file(image_bytes) as temp_path:
+                if not temp_path:
+                    raise HTTPException(status_code=500, detail="Failed to create temporary file")
+                logging.info(f"Saved uploaded image to {temp_path}")
+                
+                # Process image using detector
+                detections = detector.process_image(temp_path)
+                
+                # Find the annotated image in the annotated directory using the original image name
+                original_name = get_original_image_name(temp_path)
+                annotated_path = ANNOTATED_DIR / ('annotated_' + original_name)
+                if not os.path.exists(annotated_path):
+                    raise HTTPException(status_code=500, detail=f"Annotated image not found at {annotated_path}")
+                
+                # Read the annotated image and encode as base64
+                with open(annotated_path, "rb") as f:
+                    img_bytes = f.read()
+                    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+                
+                # Create markdown snippet for chat display
+                markdown_snippet = f"![Annotated Image](data:image/jpeg;base64,{img_b64})"
+                
+                logging.info("Image processed successfully.")
+                return {
+                    "annotated_image_b64": img_b64,
+                    "detections": detections,
+                    "markdown_snippet": markdown_snippet,
+                    "error": None
+                }
         else:
             # Handle direct file path
-            temp_path = str(DATASET_DIR / image_path)
+            temp_path = str(UNPROCESSED_DIR / image_path)
             if not os.path.exists(temp_path):
                 raise HTTPException(status_code=404, detail=f"Image not found at {temp_path}")
             logging.info(f"Using image at {temp_path}")
 
-        # Process image using detector
-        detections = detector.process_image(temp_path)
-        
-        # Find the annotated image in the annotated directory
-        annotated_path = ANNOTATED_DIR / ('annotated_' + Path(temp_path).name)
-        if not os.path.exists(annotated_path):
-            raise HTTPException(status_code=500, detail=f"Annotated image not found at {annotated_path}")
-        
-        # Read the annotated image and encode as base64
-        with open(annotated_path, "rb") as f:
-            img_bytes = f.read()
-            img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-        
-        # Create markdown snippet for chat display
-        markdown_snippet = f"![Annotated Image](data:image/jpeg;base64,{img_b64})"
-        
-        # Clean up temporary files only if we created one
-        if image_b64:
-            os.unlink(temp_path)
-        
-        logging.info("Image processed successfully.")
-        return {
-            "annotated_image_b64": img_b64,
-            "detections": detections,
-            "markdown_snippet": markdown_snippet,
-            "error": None
-        }
+            # Process image using detector
+            detections = detector.process_image(temp_path)
+            
+            # Find the annotated image in the annotated directory
+            annotated_path = ANNOTATED_DIR / ('annotated_' + image_path)
+            if not os.path.exists(annotated_path):
+                raise HTTPException(status_code=500, detail=f"Annotated image not found at {annotated_path}")
+            
+            # Read the annotated image and encode as base64
+            with open(annotated_path, "rb") as f:
+                img_bytes = f.read()
+                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+            
+            # Create markdown snippet for chat display
+            markdown_snippet = f"![Annotated Image](data:image/jpeg;base64,{img_b64})"
+            
+            logging.info("Image processed successfully.")
+            return {
+                "annotated_image_b64": img_b64,
+                "detections": detections,
+                "markdown_snippet": markdown_snippet,
+                "error": None
+            }
     except HTTPException:
         raise
     except Exception as e:
