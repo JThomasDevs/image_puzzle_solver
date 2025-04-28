@@ -83,15 +83,25 @@ class ObjectDetector:
         
         return []
         
-    def process_image(self, image_path: str):
-        """Process an image and return detections with class names"""
-        # Convert to absolute path in data/images/unprocessed
-        if not os.path.isabs(image_path):
-            image_path = str(self.unprocessed_dir / image_path)
-            
-        self.current_image = cv2.imread(image_path)
-        if self.current_image is None:
-            raise ValueError(f"Could not load image at {image_path}")
+    def process_image(self, image_path_or_array):
+        """Process an image and return detections with class names
+        
+        Args:
+            image_path_or_array: Either a path to an image file or a numpy array containing the image
+        """
+        # Handle numpy array input
+        if isinstance(image_path_or_array, np.ndarray):
+            self.current_image = image_path_or_array
+            image_name = "annotated_image.jpg"  # Default name for numpy array input
+        else:
+            # Handle file path input
+            if not os.path.isabs(image_path_or_array):
+                image_path_or_array = str(self.unprocessed_dir / image_path_or_array)
+                
+            self.current_image = cv2.imread(image_path_or_array)
+            if self.current_image is None:
+                raise ValueError(f"Could not load image at {image_path_or_array}")
+            image_name = Path(image_path_or_array).name
             
         # Run YOLO detection
         results = self.model(self.current_image)
@@ -115,10 +125,12 @@ class ObjectDetector:
                 detections.append({
                     'class_id': class_id,
                     'class_name': class_name,
-                    'x_center': x_center,
-                    'y_center': y_center,
-                    'width': box_width,
-                    'height': box_height,
+                    'bbox': {
+                        'x_center': x_center,
+                        'y_center': y_center,
+                        'width': box_width,
+                        'height': box_height
+                    },
                     'confidence': float(box.conf[0])
                 })
         
@@ -128,10 +140,12 @@ class ObjectDetector:
             detections.append({
                 'class_id': det[0],
                 'class_name': self.get_class_name(det[0]),
-                'x_center': det[1],
-                'y_center': det[2],
-                'width': det[3],
-                'height': det[4],
+                'bbox': {
+                    'x_center': det[1],
+                    'y_center': det[2],
+                    'width': det[3],
+                    'height': det[4]
+                },
                 'confidence': 1.0
             })
             
@@ -142,10 +156,10 @@ class ObjectDetector:
         # Draw all detections
         for det in detections:
             # Convert normalized coordinates back to pixel coordinates
-            x_center = det['x_center'] * width
-            y_center = det['y_center'] * height
-            box_width = det['width'] * width
-            box_height = det['height'] * height
+            x_center = det['bbox']['x_center'] * width
+            y_center = det['bbox']['y_center'] * height
+            box_width = det['bbox']['width'] * width
+            box_height = det['bbox']['height'] * height
             
             x1 = int(x_center - box_width/2)
             y1 = int(y_center - box_height/2)
@@ -162,7 +176,6 @@ class ObjectDetector:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         
         # Save annotated image in the annotated directory
-        image_name = Path(image_path).name
         annotated_path = self.annotated_dir / ('annotated_' + image_name)
         cv2.imwrite(str(annotated_path), annotated_image)
         logging.info(f"Saved annotated image to {annotated_path}")
@@ -173,4 +186,4 @@ class ObjectDetector:
         """Save detections in YOLO format"""
         with open(output_path, 'w') as f:
             for detection in detections:
-                f.write(f"{detection['class_id']} {detection['x_center']} {detection['y_center']} {detection['width']} {detection['height']}\n") 
+                f.write(f"{detection['class_id']} {detection['bbox']['x_center']} {detection['bbox']['y_center']} {detection['bbox']['width']} {detection['bbox']['height']}\n") 

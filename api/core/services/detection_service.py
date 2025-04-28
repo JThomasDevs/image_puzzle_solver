@@ -1,11 +1,13 @@
 from typing import Dict, List, Optional
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from pathlib import Path
 import base64
 import tempfile
 import os
 import logging
 import contextlib
+import cv2
+import numpy as np
 
 # Import backend functionality
 from backend.core.detector import ObjectDetector
@@ -47,88 +49,82 @@ def get_original_image_name(image_path: str) -> str:
                 return file.name
     return image_name
 
-async def process_image(image_b64: Optional[str] = None, image_path: Optional[str] = None, processing_params: Optional[Dict] = None) -> Dict:
+async def process_image(
+    file: Optional[UploadFile] = None,
+    image_b64: Optional[str] = None,
+    image_path: Optional[str] = None,
+    processing_params: Optional[Dict] = None
+) -> Dict:
     """Process an image and return detections with annotated image.
     
     Args:
+        file: The image file to process (optional)
         image_b64: Base64 encoded image data (optional)
-        image_path: Path to image file (optional)
-        processing_params: Optional dictionary of processing parameters
+        image_path: Path to image file in data directory (optional)
+        processing_params: Optional processing parameters
         
     Returns:
-        Dictionary containing processed image data, detections, and any errors
+        Dict containing:
+        - detections: List of detected objects
+        - annotated_image_b64: Base64 encoded annotated image
     """
-    logging.info("Received process_image request")
-    if not image_b64 and not image_path:
-        raise HTTPException(status_code=400, detail="Missing image input. Provide either image_b64 or image_path.")
+    # Load image from either file, base64, or path
+    if file:
+        # Read the uploaded file
+        contents = await file.read()
+        image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+        image_name = file.filename
+    elif image_b64:
+        # Decode base64 image
+        image_bytes = base64.b64decode(image_b64)
+        image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+        image_name = "annotated_image.jpg"  # Default name for base64 input
+    else:
+        # Load from file path
+        image = cv2.imread(image_path)
+        if image is None:
+            raise HTTPException(status_code=400, detail=f"Could not load image from path: {image_path}")
+        image_name = Path(image_path).name
+    
+    if image is None:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+    
+    # Process image
+    detections = detector.process_image(image)
+    
+    # Create annotated image
+    annotated_image = image.copy()
+    for det in detections:
+        bbox = det["bbox"]
+        x1 = int((bbox["x_center"] - bbox["width"]/2) * image.shape[1])
+        y1 = int((bbox["y_center"] - bbox["height"]/2) * image.shape[0])
+        x2 = int((bbox["x_center"] + bbox["width"]/2) * image.shape[1])
+        y2 = int((bbox["y_center"] + bbox["height"]/2) * image.shape[0])
         
-    try:
-        if image_b64:
-            # Handle base64 image
-            image_bytes = base64.b64decode(image_b64)
-            with temp_image_file(image_bytes) as temp_path:
-                if not temp_path:
-                    raise HTTPException(status_code=500, detail="Failed to create temporary file")
-                logging.info(f"Saved uploaded image to {temp_path}")
-                
-                # Process image using detector
-                detections = detector.process_image(temp_path)
-                
-                # Find the annotated image in the annotated directory using the original image name
-                original_name = get_original_image_name(temp_path)
-                annotated_path = ANNOTATED_DIR / ('annotated_' + original_name)
-                if not os.path.exists(annotated_path):
-                    raise HTTPException(status_code=500, detail=f"Annotated image not found at {annotated_path}")
-                
-                # Read the annotated image and encode as base64
-                with open(annotated_path, "rb") as f:
-                    img_bytes = f.read()
-                    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-                
-                # Create markdown snippet for chat display
-                markdown_snippet = f"![Annotated Image](data:image/jpeg;base64,{img_b64})"
-                
-                logging.info("Image processed successfully.")
-                return {
-                    "annotated_image_b64": img_b64,
-                    "detections": detections,
-                    "markdown_snippet": markdown_snippet,
-                    "error": None
-                }
-        else:
-            # Handle direct file path
-            if not os.path.exists(image_path):
-                raise HTTPException(status_code=404, detail=f"Image not found at {image_path}")
-            logging.info(f"Using image at {image_path}")
-
-            # Process image using detector
-            detections = detector.process_image(image_path)
-            
-            # Find the annotated image in the annotated directory
-            annotated_path = ANNOTATED_DIR / ('annotated_' + Path(image_path).name)
-            if not os.path.exists(annotated_path):
-                raise HTTPException(status_code=500, detail=f"Annotated image not found at {annotated_path}")
-            
-            # Read the annotated image and encode as base64
-            with open(annotated_path, "rb") as f:
-                img_bytes = f.read()
-                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-            
-            # Create markdown snippet for chat display
-            markdown_snippet = f"![Annotated Image](data:image/jpeg;base64,{img_b64})"
-            
-            logging.info("Image processed successfully.")
-            return {
-                "annotated_image_b64": img_b64,
-                "detections": detections,
-                "markdown_snippet": markdown_snippet,
-                "error": None
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception("Exception during image processing:")
-        raise HTTPException(status_code=500, detail=f"Exception: {str(e)}")
+        cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(
+            annotated_image,
+            f"{det['class_name']} ({det['confidence']:.2f})",
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 255, 0),
+            2
+        )
+    
+    # Save annotated image
+    annotated_path = ANNOTATED_DIR / ('annotated_' + image_name)
+    cv2.imwrite(str(annotated_path), annotated_image)
+    logging.info(f"Saved annotated image to {annotated_path}")
+    
+    # Convert annotated image to base64 for response
+    _, buffer = cv2.imencode('.jpg', annotated_image)
+    annotated_image_b64 = base64.b64encode(buffer).decode('utf-8')
+    
+    return {
+        "detections": detections,
+        "annotated_image_b64": annotated_image_b64
+    }
 
 async def detect_objects(image_name: str) -> Dict:
     """Run object detection on an image"""

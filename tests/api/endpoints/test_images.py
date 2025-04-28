@@ -149,7 +149,12 @@ def test_save_annotations(test_client, test_data_dir, sample_image):
         with open(sample_image, "rb") as f:
             file_content = f.read()
         test_file = ("test_image.jpg", io.BytesIO(file_content), "image/jpeg")
-        test_client.post("/api/v1/images/upload", files={"file": test_file})
+        upload_response = test_client.post("/api/v1/images/upload", files={"file": test_file})
+        assert upload_response.status_code == 200
+        
+        # Verify the image was uploaded to the correct location
+        image_path = unprocessed_dir / "test_image.jpg"
+        assert image_path.exists(), f"Image not found at {image_path}"
         
         # Create test annotations
         annotations = [
@@ -176,7 +181,9 @@ def test_save_annotations(test_client, test_data_dir, sample_image):
         
         # Verify the annotation file was created in the correct directory
         annotation_path = unprocessed_dir / "test_image.txt"
-        assert annotation_path.exists()
+        print(f"Looking for annotation file at: {annotation_path}")
+        print(f"Directory contents: {list(unprocessed_dir.glob('*'))}")
+        assert annotation_path.exists(), f"Annotation file not found at {annotation_path}"
     finally:
         # Restore the original directory
         image_service.DATASET_DIR = original_dir 

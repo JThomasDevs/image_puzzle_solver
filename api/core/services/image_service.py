@@ -1,7 +1,7 @@
 from pathlib import Path
 import shutil
 from typing import List, Dict
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 # Import backend functionality
 from backend.core.detector import ObjectDetector
@@ -15,11 +15,7 @@ DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 async def list_images() -> List[str]:
     """List all available images"""
-    images = []
-    for file in DATASET_DIR.glob("*.jpg"):
-        if not file.name.startswith("annotated_"):
-            images.append(file.name)
-    return sorted(images)
+    return sorted([f.name for f in DATASET_DIR.glob("*.jpg") if not f.name.startswith("annotated_")])
 
 async def get_image(image_name: str) -> Dict:
     """Get image details and annotations"""
@@ -40,8 +36,6 @@ async def get_image(image_name: str) -> Dict:
                     class_id = int(class_id)
                     detections.append({
                         'class_id': class_id,
-                        'class_name': detector.get_class_name(class_id),
-                        'confidence': 1.0,
                         'bbox': {
                             'x_center': x_center,
                             'y_center': y_center,
@@ -50,9 +44,13 @@ async def get_image(image_name: str) -> Dict:
                         }
                     })
     
-    return {"detections": detections}
+    return {
+        "filename": image_name,
+        "path": str(image_path),
+        "detections": detections
+    }
 
-async def upload_image(file) -> Dict:
+async def upload_image(file: UploadFile) -> Dict:
     """Upload a new image"""
     file_path = DATASET_DIR / file.filename
     with open(file_path, "wb") as buffer:
@@ -68,16 +66,16 @@ async def save_annotations(image_name: str, annotations: List[Dict]) -> Dict:
     # Convert annotations to YOLO format
     detections = [
         {
-            'class_id': d['class_id'],
-            'x_center': d['bbox']['x_center'],
-            'y_center': d['bbox']['y_center'],
-            'width': d['bbox']['width'],
-            'height': d['bbox']['height']
+            "class_id": ann["class_id"],
+            "bbox": ann["bbox"]
         }
-        for d in annotations
+        for ann in annotations
     ]
     
-    # Save detections
-    label_path = str(image_path.with_suffix('.txt'))
-    detector.save_detections(detections, label_path)
-    return {"message": "Annotations saved successfully", "label_path": label_path} 
+    # Save annotations to file in the same directory as the image
+    annotation_path = image_path.with_suffix('.txt')
+    with open(annotation_path, "w") as f:
+        for det in detections:
+            f.write(f"{det['class_id']} {det['bbox']['x_center']} {det['bbox']['y_center']} {det['bbox']['width']} {det['bbox']['height']}\n")
+    
+    return {"message": "Annotations saved successfully"} 
