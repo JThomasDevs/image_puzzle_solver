@@ -9,6 +9,7 @@ router = APIRouter()
 
 class ProcessImageRequest(BaseModel):
     image_b64: Optional[str] = None
+    image_name: Optional[str] = None
     image_path: Optional[str] = None
     processing_params: Optional[Dict] = None
 
@@ -17,24 +18,32 @@ async def process_image(body: ProcessImageRequest):
     """Process an image and return detections with annotated image.
     
     Args:
-        image_b64: Base64 encoded image data (optional)
+        image_b64: Base64 encoded image data (optional, requires image_name)
+        image_name: Name to use for the image if using image_b64 (required if image_b64 is provided)
         image_path: Path to image file in data directory (optional)
         processing_params: Optional dictionary of processing parameters
         
-    Note: Only one of image_b64 or image_path must be provided.
+    Note: Provide either image_b64 (with image_name) or image_path.
     """
     image_b64 = body.image_b64
+    image_name = body.image_name
     image_path = body.image_path
     processing_params = body.processing_params
 
     # Validate input
-    if (image_b64 is None) == (image_path is None):
+    if image_b64:
+        if not image_name:
+            raise HTTPException(
+                status_code=400,
+                detail="When using image_b64, you must also provide image_name."
+            )
+    elif not image_path:
         raise HTTPException(
             status_code=400,
-            detail="Please provide exactly one of: image_b64 or image_path"
+            detail="Please provide either image_b64 (with image_name) or image_path."
         )
-    
-    return await detection_service.process_image(None, image_b64, image_path, processing_params)
+    # If both are provided, prefer image_b64
+    return await detection_service.process_image(None, image_b64, image_path, processing_params, image_name=image_name)
 
 @router.post("/upload")
 async def upload_and_process(file: UploadFile = File(...), processing_params: Optional[Dict] = None):
@@ -73,4 +82,9 @@ async def annotate_image(image_name: str, processing_params: Optional[Dict] = No
         image_path=image_name,
         processing_params=processing_params
     )
-    return await process_image(request) 
+    return await process_image(request)
+
+@router.get("/classes")
+async def get_classes():
+    """Return the list of available detection classes."""
+    return await detection_service.get_classes() 

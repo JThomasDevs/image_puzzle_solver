@@ -138,25 +138,17 @@ def test_save_annotations(test_client, test_data_dir, sample_image):
     test_dir.mkdir(exist_ok=True)
     unprocessed_dir = test_dir / "images" / "unprocessed"
     unprocessed_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Patch the DATASET_DIR to use our test directory
     import api.core.services.image_service as image_service
     original_dir = image_service.DATASET_DIR
     image_service.DATASET_DIR = unprocessed_dir
-    
     try:
-        # First upload an image
         with open(sample_image, "rb") as f:
             file_content = f.read()
         test_file = ("test_image.jpg", io.BytesIO(file_content), "image/jpeg")
         upload_response = test_client.post("/api/v1/images/upload", files={"file": test_file})
         assert upload_response.status_code == 200
-        
-        # Verify the image was uploaded to the correct location
         image_path = unprocessed_dir / "test_image.jpg"
         assert image_path.exists(), f"Image not found at {image_path}"
-        
-        # Create test annotations
         annotations = [
             {
                 "class_id": 0,
@@ -164,26 +156,22 @@ def test_save_annotations(test_client, test_data_dir, sample_image):
                     "x_center": 0.5,
                     "y_center": 0.5,
                     "width": 0.2,
-                    "height": 0.2
+                    "height": 0.2,
+                    "rotation_angle": 0,
+                    "polygon_points": None
                 }
             }
         ]
-        
-        # Send the request
         response = test_client.put(
             "/api/v1/images/test_image.jpg/annotations",
-            json=annotations
+            json={"annotations": annotations}
         )
-        
         assert response.status_code == 200
         assert "message" in response.json()
         assert response.json()["message"] == "Annotations saved successfully"
-        
-        # Verify the annotation file was created in the correct directory
         annotation_path = unprocessed_dir / "test_image.txt"
         print(f"Looking for annotation file at: {annotation_path}")
         print(f"Directory contents: {list(unprocessed_dir.glob('*'))}")
         assert annotation_path.exists(), f"Annotation file not found at {annotation_path}"
     finally:
-        # Restore the original directory
         image_service.DATASET_DIR = original_dir 

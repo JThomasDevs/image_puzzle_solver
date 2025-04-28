@@ -95,7 +95,8 @@ async def process_image(
     file: Optional[UploadFile] = None,
     image_b64: Optional[str] = None,
     image_path: Optional[str] = None,
-    processing_params: Optional[Dict] = None
+    processing_params: Optional[Dict] = None,
+    image_name: Optional[str] = None
 ) -> Dict:
     """Process an image and return detections with annotated image.
     
@@ -104,13 +105,13 @@ async def process_image(
         image_b64: Base64 encoded image data (optional)
         image_path: Path to image file in data directory (optional)
         processing_params: Optional processing parameters
+        image_name: Name to use for the image if using image_b64 (required if image_b64 is provided)
         
     Returns:
         Dict containing:
         - detections: List of detected objects
         - annotated_image_b64: Base64 encoded annotated image
     """
-    
     # Load image from either file, base64, or path
     if file:
         # Read the uploaded file
@@ -121,10 +122,8 @@ async def process_image(
         # Decode base64 image
         image_bytes = base64.b64decode(image_b64)
         image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if image_path:
-            image_name = Path(image_path).name
-        else:
-            raise HTTPException(status_code=400, detail="image_path must be provided when using image_b64.")
+        if not image_name:
+            raise HTTPException(status_code=400, detail="image_name must be provided when using image_b64.")
     elif image_path:
         # Load from file path, ensuring it's relative to UNPROCESSED_DIR
         if isinstance(image_path, str):
@@ -136,8 +135,8 @@ async def process_image(
             raise HTTPException(status_code=400, detail=f"Could not load image from path: {image_path}")
         image_name = image_path.name
     else:
-        raise HTTPException(status_code=400, detail="No valid image source provided. Must provide file, image_b64 with image_path, or image_path.")
-    
+        raise HTTPException(status_code=400, detail="No valid image source provided. Must provide file, image_b64 with image_name, or image_path.")
+
     if image is None:
         raise HTTPException(status_code=400, detail="Invalid image data")
     

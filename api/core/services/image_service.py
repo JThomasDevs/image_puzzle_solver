@@ -57,25 +57,31 @@ async def upload_image(file: UploadFile) -> Dict:
         shutil.copyfileobj(file.file, buffer)
     return {"message": "Image uploaded successfully", "filename": file.filename}
 
-async def save_annotations(image_name: str, annotations: List[Dict]) -> Dict:
+async def save_annotations(image_name: str, annotations: List) -> Dict:
     """Save annotations for an image"""
     image_path = DATASET_DIR / image_name
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
-        
     # Convert annotations to YOLO format
-    detections = [
-        {
-            "class_id": ann["class_id"],
-            "bbox": ann["bbox"]
-        }
-        for ann in annotations
-    ]
-    
+    detections = []
+    for ann in annotations:
+        if hasattr(ann, 'class_id') and hasattr(ann, 'bbox'):
+            # Pydantic model
+            bbox = ann.bbox.model_dump() if hasattr(ann.bbox, 'model_dump') else dict(ann.bbox)
+            detections.append({
+                "class_id": ann.class_id,
+                "bbox": bbox
+            })
+        else:
+            # Dict
+            detections.append({
+                "class_id": ann["class_id"],
+                "bbox": ann["bbox"]
+            })
     # Save annotations to file in the same directory as the image
     annotation_path = image_path.with_suffix('.txt')
     with open(annotation_path, "w") as f:
         for det in detections:
-            f.write(f"{det['class_id']} {det['bbox']['x_center']} {det['bbox']['y_center']} {det['bbox']['width']} {det['bbox']['height']}\n")
-    
+            bbox = det["bbox"]
+            f.write(f"{det['class_id']} {bbox['x_center']} {bbox['y_center']} {bbox['width']} {bbox['height']}\n")
     return {"message": "Annotations saved successfully"} 

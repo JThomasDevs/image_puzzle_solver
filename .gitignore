@@ -31,17 +31,37 @@ env/
 *.swp
 *.swo
 
-# Dataset (optional - remove if you want to track dataset)
-dataset/
-*.jpg
-*.jpeg
-*.png
-*.txt
+# Data and Model Artifacts
+# Exclude all images and annotation files, but keep folder structure
+/data/images/*
+!/data/images/.gitkeep
+/data/images/*/*
+!/data/images/*/.gitkeep
 
-# Logs
+# Exclude model weights
+backend/*.pt
+backend/*.pth
+backend/*.onnx
+
+# Logs and Coverage
 *.log
+.coverage
+last_test_output.txt
 
 # Node.js
-node_modules/
+frontend/node_modules/
+# (add dist/ or build/ here if you have frontend build output)
 
-# Allow requirements.txt 
+# Test and build artifacts
+.pytest_cache/
+
+# Remove old dataset ignore
+- dataset/
+
+# Asset files
+# (Uncomment the next line if image.png is a test artifact)
+# image.png
+
+# Allow requirements.txt and README.md
+!requirements.txt
+!README.md 

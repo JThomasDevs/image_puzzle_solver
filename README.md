@@ -59,6 +59,7 @@ image_puzzle_solver/
 ## Requirements
 
 ### Backend
+
 - Python 3.x
 - OpenCV
 - Ultralytics (YOLOv8)
@@ -66,6 +67,7 @@ image_puzzle_solver/
 - NumPy
 
 ### Frontend
+
 - Node.js
 - React
 - Material-UI
@@ -73,12 +75,14 @@ image_puzzle_solver/
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd image_puzzle_solver
 ```
 
 2. Set up the backend:
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -86,6 +90,7 @@ pip install -r requirements.txt
 ```
 
 3. Set up the frontend:
+
 ```bash
 cd frontend
 npm install
@@ -94,18 +99,20 @@ npm install
 ## Usage
 
 1. Start the API server:
+
 ```bash
 cd api
 python run.py
 ```
 
-2. Start the frontend development server:
+2.Start the frontend development server:
+
 ```bash
 cd frontend
 npm start
 ```
 
-The web interface will be available at http://localhost:3000, and the API at http://localhost:8000.
+The web interface will be available at <http://localhost:3000>, and the API at <http://localhost:8000>.
 
 ## API Endpoints
 
