@@ -5,6 +5,7 @@ import numpy as np
 from ultralytics import YOLO
 import logging
 import tempfile
+from math import atan2, degrees
 
 class ObjectDetector:
     def __init__(self):
@@ -44,6 +45,19 @@ class ObjectDetector:
     def get_class_name(self, class_id: int) -> str:
         """Convert a class ID back to its string name"""
         return self.class_names.get(class_id, "unknown")
+        
+    def calculate_rotation_angle(self, box):
+        """Calculate the rotation angle of a bounding box based on its shape"""
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        width = x2 - x1
+        height = y2 - y1
+        
+        # If the box is significantly wider than tall, it might be rotated
+        if width > height * 1.5:
+            # Calculate angle based on the longer side
+            angle = degrees(atan2(y2 - y1, x2 - x1))
+            return angle
+        return 0
         
     def detect_crosswalk(self, image):
         """Detect crosswalk using image processing techniques"""
@@ -121,6 +135,11 @@ class ObjectDetector:
                 box_width = (x2 - x1) / width
                 box_height = (y2 - y1) / height
                 
+                # Calculate rotation angle for certain classes
+                rotation_angle = 0
+                if class_name in ['traffic light', 'stop sign', 'fire hydrant']:
+                    rotation_angle = self.calculate_rotation_angle(box)
+                
                 class_id = self.target_classes[class_name]
                 detections.append({
                     'class_id': class_id,
@@ -129,7 +148,8 @@ class ObjectDetector:
                         'x_center': x_center,
                         'y_center': y_center,
                         'width': box_width,
-                        'height': box_height
+                        'height': box_height,
+                        'rotation_angle': rotation_angle
                     },
                     'confidence': float(box.conf[0])
                 })
@@ -144,7 +164,8 @@ class ObjectDetector:
                     'x_center': det[1],
                     'y_center': det[2],
                     'width': det[3],
-                    'height': det[4]
+                    'height': det[4],
+                    'rotation_angle': 0
                 },
                 'confidence': 1.0
             })
@@ -186,4 +207,5 @@ class ObjectDetector:
         """Save detections in YOLO format"""
         with open(output_path, 'w') as f:
             for detection in detections:
-                f.write(f"{detection['class_id']} {detection['bbox']['x_center']} {detection['bbox']['y_center']} {detection['bbox']['width']} {detection['bbox']['height']}\n") 
+                bbox = detection['bbox']
+                f.write(f"{detection['class_id']} {bbox['x_center']} {bbox['y_center']} {bbox['width']} {bbox['height']} {bbox.get('rotation_angle', 0)}\n") 

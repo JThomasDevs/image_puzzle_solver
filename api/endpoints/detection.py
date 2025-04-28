@@ -37,31 +37,60 @@ async def process_image(body: ProcessImageRequest):
     return await detection_service.process_image(None, image_b64, image_path, processing_params)
 
 @router.post("/upload")
-async def upload_and_process(file: UploadFile = File(...)):
+async def upload_and_process(file: UploadFile = File(...), processing_params: Optional[Dict] = None):
     """Upload and process an image.
     
     This endpoint:
     1. First uploads the image using the image service
     2. Then processes it for object detection
+    
+    Args:
+        file: The image file to upload
+        processing_params: Optional dictionary of processing parameters
     """
     # First upload the image
     upload_response = await image_service.upload_image(file)
     filename = upload_response["filename"]
     
+    # Create request body
+    request = ProcessImageRequest(
+        image_path=filename,
+        processing_params=processing_params
+    )
+    
     # Then process it
-    return await detection_service.detect_objects(filename)
+    return await process_image(request)
 
 @router.post("/detect/{image_name}")
-async def detect_objects(image_name: str):
-    """Run object detection on an image"""
-    return await detection_service.detect_objects(image_name)
+async def detect_objects(image_name: str, processing_params: Optional[Dict] = None):
+    """Run object detection on an image
+    
+    Args:
+        image_name: Name of the image to process
+        processing_params: Optional dictionary of processing parameters
+    """
+    request = ProcessImageRequest(
+        image_path=image_name,
+        processing_params=processing_params
+    )
+    return await process_image(request)
 
+# TODO: Manually test endpoints below this comment
 @router.get("/classes")
 async def get_classes():
     """Get available object classes"""
     return await detection_service.get_classes()
 
 @router.post("/annotate/{image_name}")
-async def annotate_image(image_name: str):
-    """Create an annotated version of the image with detections"""
-    return await detection_service.annotate_image(image_name) 
+async def annotate_image(image_name: str, processing_params: Optional[Dict] = None):
+    """Create an annotated version of the image with detections
+    
+    Args:
+        image_name: Name of the image to annotate
+        processing_params: Optional dictionary of processing parameters
+    """
+    request = ProcessImageRequest(
+        image_path=image_name,
+        processing_params=processing_params
+    )
+    return await process_image(request) 

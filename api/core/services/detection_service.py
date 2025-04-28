@@ -8,6 +8,7 @@ import logging
 import contextlib
 import cv2
 import numpy as np
+from math import cos, sin, radians
 
 # Import backend functionality
 from backend.core.detector import ObjectDetector
@@ -22,6 +23,46 @@ ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "data" / "images" /
 # Create directories if they don't exist
 UNPROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)
+
+def draw_rotated_rectangle(img, center, width, height, angle, color, thickness):
+    """Draw a rotated rectangle on the image"""
+    # Convert angle to radians
+    angle_rad = radians(angle)
+    
+    # Calculate the four corners of the rectangle
+    w = width * img.shape[1]
+    h = height * img.shape[0]
+    cx = center[0] * img.shape[1]
+    cy = center[1] * img.shape[0]
+    
+    # Calculate the rotation matrix
+    cos_a = cos(angle_rad)
+    sin_a = sin(angle_rad)
+    
+    # Calculate the four corners
+    corners = np.array([
+        [cx - w/2, cy - h/2],
+        [cx + w/2, cy - h/2],
+        [cx + w/2, cy + h/2],
+        [cx - w/2, cy + h/2]
+    ])
+    
+    # Rotate the corners
+    rot_matrix = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+    rotated_corners = np.dot(corners - [cx, cy], rot_matrix.T) + [cx, cy]
+    
+    # Convert to integer coordinates
+    rotated_corners = rotated_corners.astype(int)
+    
+    # Draw the rotated rectangle
+    for i in range(4):
+        cv2.line(img, tuple(rotated_corners[i]), tuple(rotated_corners[(i+1)%4]), color, thickness)
+
+def draw_polygon(img, points, color, thickness):
+    """Draw a polygon on the image"""
+    points = np.array([(int(x * img.shape[1]), int(y * img.shape[0])) for x, y in points], np.int32)
+    points = points.reshape((-1, 1, 2))
+    cv2.polylines(img, [points], True, color, thickness)
 
 @contextlib.contextmanager
 def temp_image_file(image_bytes=None):
@@ -78,13 +119,17 @@ async def process_image(
         # Decode base64 image
         image_bytes = base64.b64decode(image_b64)
         image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        image_name = "annotated_image.jpg"  # Default name for base64 input
+        image_name = Path(image_path).name if image_path else "image.jpg"
     else:
-        # Load from file path
-        image = cv2.imread(image_path)
+        # Load from file path, ensuring it's relative to UNPROCESSED_DIR
+        if isinstance(image_path, str):
+            image_path = Path(image_path)
+        if not image_path.is_absolute():
+            image_path = UNPROCESSED_DIR / image_path
+        image = cv2.imread(str(image_path))
         if image is None:
             raise HTTPException(status_code=400, detail=f"Could not load image from path: {image_path}")
-        image_name = Path(image_path).name
+        image_name = image_path.name
     
     if image is None:
         raise HTTPException(status_code=400, detail="Invalid image data")
@@ -96,16 +141,34 @@ async def process_image(
     annotated_image = image.copy()
     for det in detections:
         bbox = det["bbox"]
-        x1 = int((bbox["x_center"] - bbox["width"]/2) * image.shape[1])
-        y1 = int((bbox["y_center"] - bbox["height"]/2) * image.shape[0])
-        x2 = int((bbox["x_center"] + bbox["width"]/2) * image.shape[1])
-        y2 = int((bbox["y_center"] + bbox["height"]/2) * image.shape[0])
         
-        cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        # Draw either rotated rectangle or polygon based on bbox type
+        if "polygon_points" in bbox and bbox["polygon_points"]:
+            # Draw polygon
+            points = [(p["x"], p["y"]) for p in bbox["polygon_points"]]
+            draw_polygon(annotated_image, points, (0, 255, 0), 2)
+        else:
+            # Draw rotated rectangle
+            center = (bbox["x_center"], bbox["y_center"])
+            width = bbox["width"]
+            height = bbox["height"]
+            angle = bbox.get("rotation_angle", 0)
+            draw_rotated_rectangle(annotated_image, center, width, height, angle, (0, 255, 0), 2)
+        
+        # Add label
+        label = f"{det['class_name']} ({det['confidence']:.2f})"
+        if "polygon_points" in bbox and bbox["polygon_points"]:
+            # Use first point for label position
+            x = int(bbox["polygon_points"][0]["x"] * image.shape[1])
+            y = int(bbox["polygon_points"][0]["y"] * image.shape[0])
+        else:
+            x = int((bbox["x_center"] - bbox["width"]/2) * image.shape[1])
+            y = int((bbox["y_center"] - bbox["height"]/2) * image.shape[0])
+        
         cv2.putText(
             annotated_image,
-            f"{det['class_name']} ({det['confidence']:.2f})",
-            (x1, y1 - 10),
+            label,
+            (x, y - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (0, 255, 0),
@@ -128,10 +191,10 @@ async def process_image(
 
 async def detect_objects(image_name: str) -> Dict:
     """Run object detection on an image"""
-    image_path = str(UNPROCESSED_DIR / image_name)
-    if not Path(image_path).exists():
+    image_path = UNPROCESSED_DIR / image_name
+    if not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
-    return await process_image(image_path=image_path)
+    return await process_image(image_path=str(image_path))
 
 async def get_classes() -> Dict:
     """Get available object classes"""
