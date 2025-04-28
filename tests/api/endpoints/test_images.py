@@ -127,7 +127,7 @@ def test_save_annotations(test_client, test_data_dir, sample_image):
     This test:
     1. First uploads a test image
     2. Creates test annotations in YOLO format
-    3. Sends a POST request to /api/v1/images/{image_name}/annotations
+    3. Sends a PUT request to /api/v1/images/{image_name}/annotations
     4. Verifies that:
        - The response is successful
        - The success message is returned
@@ -170,7 +170,7 @@ def test_save_annotations(test_client, test_data_dir, sample_image):
         ]
         
         # Send the request
-        response = test_client.post(
+        response = test_client.put(
             "/api/v1/images/test_image.jpg/annotations",
             json=annotations
         )

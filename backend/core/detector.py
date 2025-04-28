@@ -10,7 +10,7 @@ from math import atan2, degrees
 class ObjectDetector:
     def __init__(self):
         # Get the path to the model file relative to this file
-        model_path = Path(__file__).parent.parent.parent / 'yolov8n.pt'
+        model_path = Path(__file__).parent.parent / 'yolov8n.pt'
         self.model = YOLO(str(model_path))
         self.current_image = None
         
@@ -97,25 +97,26 @@ class ObjectDetector:
         
         return []
         
-    def process_image(self, image_path_or_array):
+    def process_image(self, image_path_or_array, image_name=None):
         """Process an image and return detections with class names
         
         Args:
             image_path_or_array: Either a path to an image file or a numpy array containing the image
+            image_name: Optional name to use for saving the annotated image
         """
         # Handle numpy array input
         if isinstance(image_path_or_array, np.ndarray):
             self.current_image = image_path_or_array
-            image_name = "annotated_image.jpg"  # Default name for numpy array input
+            if image_name is None:
+                image_name = "annotated_image.jpg"
         else:
             # Handle file path input
             if not os.path.isabs(image_path_or_array):
                 image_path_or_array = str(self.unprocessed_dir / image_path_or_array)
-                
             self.current_image = cv2.imread(image_path_or_array)
             if self.current_image is None:
                 raise ValueError(f"Could not load image at {image_path_or_array}")
-            image_name = Path(image_path_or_array).name
+            image_name = Path(image_path_or_array).name if image_name is None else image_name
             
         # Run YOLO detection
         results = self.model(self.current_image)

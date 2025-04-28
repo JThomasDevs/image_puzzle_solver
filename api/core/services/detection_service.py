@@ -9,6 +9,7 @@ import contextlib
 import cv2
 import numpy as np
 from math import cos, sin, radians
+import traceback
 
 # Import backend functionality
 from backend.core.detector import ObjectDetector
@@ -109,6 +110,7 @@ async def process_image(
         - detections: List of detected objects
         - annotated_image_b64: Base64 encoded annotated image
     """
+    
     # Load image from either file, base64, or path
     if file:
         # Read the uploaded file
@@ -119,8 +121,11 @@ async def process_image(
         # Decode base64 image
         image_bytes = base64.b64decode(image_b64)
         image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        image_name = Path(image_path).name if image_path else "image.jpg"
-    else:
+        if image_path:
+            image_name = Path(image_path).name
+        else:
+            raise HTTPException(status_code=400, detail="image_path must be provided when using image_b64.")
+    elif image_path:
         # Load from file path, ensuring it's relative to UNPROCESSED_DIR
         if isinstance(image_path, str):
             image_path = Path(image_path)
@@ -130,12 +135,14 @@ async def process_image(
         if image is None:
             raise HTTPException(status_code=400, detail=f"Could not load image from path: {image_path}")
         image_name = image_path.name
+    else:
+        raise HTTPException(status_code=400, detail="No valid image source provided. Must provide file, image_b64 with image_path, or image_path.")
     
     if image is None:
         raise HTTPException(status_code=400, detail="Invalid image data")
     
     # Process image
-    detections = detector.process_image(image)
+    detections = detector.process_image(image, image_name=image_name)
     
     # Create annotated image
     annotated_image = image.copy()
@@ -179,6 +186,19 @@ async def process_image(
     annotated_path = ANNOTATED_DIR / ('annotated_' + image_name)
     cv2.imwrite(str(annotated_path), annotated_image)
     logging.info(f"Saved annotated image to {annotated_path}")
+
+    # Save YOLO-format annotation file in the annotated directory
+    annotation_txt_path = annotated_path.with_suffix('.txt')
+    with open(annotation_txt_path, 'w') as f:
+        for det in detections:
+            bbox = det['bbox']
+            class_id = det['class_id']
+            x_center = bbox['x_center']
+            y_center = bbox['y_center']
+            width = bbox['width']
+            height = bbox['height']
+            f.write(f"{class_id} {x_center} {y_center} {width} {height}\n")
+    logging.info(f"Saved annotation file to {annotation_txt_path}")
     
     # Convert annotated image to base64 for response
     _, buffer = cv2.imencode('.jpg', annotated_image)

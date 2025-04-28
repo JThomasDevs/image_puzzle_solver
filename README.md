@@ -6,19 +6,46 @@ A tool for detecting and labeling objects in images, with special focus on cross
 
 ```
 image_puzzle_solver/
-├── backend/               # Core detection and processing logic
-│   ├── core/             # Core functionality
-│   │   └── detector.py   # Object detection implementation
-│   └── utils/            # Utility functions
-├── api/                  # FastAPI backend API
-│   ├── app/
-│   │   ├── main.py      # FastAPI application
-│   │   ├── models.py    # Pydantic models
-│   │   └── routes/      # API endpoints
-│   └── run.py           # API server runner
-└── frontend/            # React frontend
-    ├── public/          # Static files
-    └── src/             # React components and logic
+├── api/                        # FastAPI backend API
+│   ├── core/
+│   │   └── services/           # Service logic (detection, image handling)
+│   ├── endpoints/              # API endpoint definitions
+│   ├── static/                 # Static files (if any)
+│   ├── main.py                 # FastAPI app entrypoint
+│   └── run.py                  # API server runner
+├── backend/                    # Core detection and processing logic
+│   ├── core/
+│   │   └── detector.py         # Object detection implementation (YOLO, etc.)
+│   └── utils/                  # Utility functions
+├── data/                       # Data storage
+│   └── images/
+│       ├── annotated/          # Annotated images (output)
+│       ├── unprocessed/        # Raw/unprocessed images (input)
+│       ├── train/              # Training images and labels
+│       ├── test/               # Test images
+│       └── val/                # Validation images
+├── frontend/                   # React frontend
+│   ├── public/                 # Static frontend files
+│   └── src/
+│       ├── components/         # React components
+│       ├── App.js, index.js    # Main frontend logic
+│       └── styles.css          # Frontend styles
+├── tests/                      # Test suite
+│   └── api/
+│       ├── endpoints/          # Endpoint tests
+│       └── core/               # Core service tests
+├── training/                   # Model training scripts and utilities
+│   ├── image_annotation.py     # Annotation and processing for training
+│   ├── train_puzzle_model.py   # Model training script
+│   ├── split_dataset.py        # Dataset splitting utility
+│   └── download_training_images.py # Download images for training
+├── requirements.txt            # Python dependencies
+├── README.md                   # Project documentation
+├── .gitignore
+├── pytest.ini
+├── yolov8n.pt                  # YOLOv8 model weights
+├── test_api.py, test_endpoint.py, test_solver.py, test_rotated_bbox.py, test_rotated_detection.py
+└── venv/                       # Python virtual environment (should be in .gitignore)
 ```
 
 ## Features
@@ -84,8 +111,8 @@ The web interface will be available at http://localhost:3000, and the API at htt
 
 - `GET /api/v1/images` - List all available images
 - `GET /api/v1/images/{image_name}` - Get detections for a specific image
-- `PUT /api/v1/images/{image_name}` - Update detections for a specific image
-
-## License
-
-[Add your license here] 
+- `PUT /api/v1/images/{image_name}/annotations` - Update (replace) annotations for a specific image
+- `POST /api/v1/detection/upload` - Upload an image for processing
+- `POST /api/v1/detection/process` - Process an image (base64 or by path)
+- `POST /api/v1/detection/annotate/{image_name}` - Run detection and get the annotated image and detection data for a specific image
+- `GET /api/v1/detection/classes` - Get available object classes

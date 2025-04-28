@@ -142,7 +142,7 @@ async def upload_image(file: UploadFile = File(...)) -> UploadResponse:
     """
     return await image_service.upload_image(file)
 
-@router.post("/{image_name}/annotations", response_model=SaveAnnotationsResponse)
+@router.put("/{image_name}/annotations", response_model=SaveAnnotationsResponse)
 async def save_annotations(
     image_name: str,
     request: SaveAnnotationsRequest

@@ -61,26 +61,6 @@ async def upload_and_process(file: UploadFile = File(...), processing_params: Op
     # Then process it
     return await process_image(request)
 
-@router.post("/detect/{image_name}")
-async def detect_objects(image_name: str, processing_params: Optional[Dict] = None):
-    """Run object detection on an image
-    
-    Args:
-        image_name: Name of the image to process
-        processing_params: Optional dictionary of processing parameters
-    """
-    request = ProcessImageRequest(
-        image_path=image_name,
-        processing_params=processing_params
-    )
-    return await process_image(request)
-
-# TODO: Manually test endpoints below this comment
-@router.get("/classes")
-async def get_classes():
-    """Get available object classes"""
-    return await detection_service.get_classes()
-
 @router.post("/annotate/{image_name}")
 async def annotate_image(image_name: str, processing_params: Optional[Dict] = None):
     """Create an annotated version of the image with detections
