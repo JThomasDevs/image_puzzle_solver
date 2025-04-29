@@ -1,6 +1,8 @@
 # Image Puzzle Solver
 
-A tool for detecting and labeling objects in images, with special focus on crosswalk detection. This project uses YOLO for object detection and custom image processing for crosswalk detection.
+A tool for detecting and labeling objects in images that uses YOLO for object detection.
+
+A work-in-progress to solve image-based puzzles in which the user is given the name of a thing and then must select images containing that thing. Images are usually arranged in a grid of 9.
 
 ## Project Structure
 
@@ -51,7 +53,6 @@ image_puzzle_solver/
 ## Features
 
 - Object detection using YOLOv8
-- Custom crosswalk detection using image processing techniques
 - RESTful API for image processing
 - Interactive web interface for image annotation
 - YOLO format label output
