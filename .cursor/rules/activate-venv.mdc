@@ -1,6 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: true
----
-Activate the venv before running any .py files in this project.
