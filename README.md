@@ -71,7 +71,6 @@ image_puzzle_solver/
 
 - Node.js
 - React
-- Material-UI
 
 ## Installation
 
