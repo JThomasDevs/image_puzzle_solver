@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pathlib import Path
 
 from ..core.services import detection_service, image_service
+from ..core.services.detection_service import UNPROCESSED_DIR
 from backend.core.models.image import Image
 
 router = APIRouter()
@@ -16,8 +17,11 @@ async def process_image(image_path: str):
     Args:
         image_path: Path to image file in data directory (required)
     """
-    image = Image(UNPROCESSED_DIR / image_path)
-    return await detection_service.process_image(image)
+    try:
+        image = Image(UNPROCESSED_DIR / image_path)
+        return await detection_service.process_image(image)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/upload")
 async def upload_and_process(file: UploadFile = File(...)):
