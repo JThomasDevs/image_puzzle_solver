@@ -3,7 +3,7 @@ import requests
 from pathlib import Path
 import shutil
 
-API_ANNOTATE = "http://localhost:8000/api/v1/detection/annotate/"
+API_PROCESS = "http://localhost:8000/api/v1/detection/process"
 API_SAVE_ANNOT = "http://localhost:8000/api/v1/images/{}/annotations"
 
 class ImageAnnotator:
@@ -19,7 +19,7 @@ class ImageAnnotator:
             tuple: (bool, list) - Success flag and list of annotations
         """
         image_name = Path(image_path).name
-        response = requests.post(f"{API_ANNOTATE}{image_name}")
+        response = requests.post(f"{API_PROCESS}/{image_name}")
         if response.status_code == 200:
             print(f"Annotated {image_name} via API.")
             return True, response.json().get("detections", [])

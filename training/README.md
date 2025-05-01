@@ -5,7 +5,7 @@ This directory contains scripts for training and preparing the puzzle solver mod
 ## Files
 
 - `download_training_images.py`: Downloads training images using DuckDuckGo search
-- `image_annotation.py`: Handles image annotation and processing, including custom crosswalk detection
+- `image_annotation.py`: Handles image annotation and processing
 
 ## Training Process
 

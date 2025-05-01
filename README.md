@@ -120,6 +120,5 @@ The web interface will be available at <http://localhost:3000>, and the API at <
 - `GET /api/v1/images/{image_name}` - Get detections for a specific image
 - `PUT /api/v1/images/{image_name}/annotations` - Update (replace) annotations for a specific image
 - `POST /api/v1/detection/upload` - Upload an image for processing
-- `POST /api/v1/detection/process` - Process an image (base64 or by path)
-- `POST /api/v1/detection/annotate/{image_name}` - Run detection and get the annotated image and detection data for a specific image
+- `POST /api/v1/detection/process/{image_name}` - Process an image to get the annotated image and detection data for the image
 - `GET /api/v1/detection/classes` - Get available object classes

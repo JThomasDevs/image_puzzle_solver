@@ -13,6 +13,7 @@ import traceback
 
 # Import backend functionality
 from backend.core.detector import ObjectDetector
+from backend.core.models.image import Image
 
 # Initialize detector
 detector = ObjectDetector()
@@ -65,106 +66,41 @@ def draw_polygon(img, points, color, thickness):
     points = points.reshape((-1, 1, 2))
     cv2.polylines(img, [points], True, color, thickness)
 
-@contextlib.contextmanager
-def temp_image_file(image_bytes=None):
-    """Context manager for handling temporary image files"""
-    temp_path = None
-    try:
-        if image_bytes:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-                temp_file.write(image_bytes)
-                temp_path = temp_file.name
-            yield temp_path
-        else:
-            yield None
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
-
-def get_original_image_name(image_path: str) -> str:
-    """Get the original image name from a path, handling both regular paths and temp files"""
-    image_name = Path(image_path).name
-    if image_name.startswith('tmp'):
-        # If it's a temp file, try to get the original name from the unprocessed directory
-        for file in UNPROCESSED_DIR.glob('*.jpg'):
-            if not file.name.startswith('annotated_'):
-                return file.name
-    return image_name
-
-async def process_image(
-    file: Optional[UploadFile] = None,
-    image_b64: Optional[str] = None,
-    image_path: Optional[str] = None,
-    processing_params: Optional[Dict] = None,
-    image_name: Optional[str] = None
-) -> Dict:
+async def process_image(image: Image) -> Dict:
     """Process an image and return detections with annotated image.
     
     Args:
-        file: The image file to process (optional)
-        image_b64: Base64 encoded image data (optional)
-        image_path: Path to image file in data directory (optional)
-        processing_params: Optional processing parameters
-        image_name: Name to use for the image if using image_b64 (required if image_b64 is provided)
+        image: Image object to process
         
     Returns:
         Dict containing:
         - detections: List of detected objects
-        - annotated_image_b64: Base64 encoded annotated image
+        - annotated_path: Path to the annotated image
     """
-    # Load image from either file, base64, or path
-    if file:
-        # Read the uploaded file
-        contents = await file.read()
-        image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
-        image_name = file.filename
-    elif image_b64:
-        # Decode base64 image
-        image_bytes = base64.b64decode(image_b64)
-        image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if not image_name:
-            raise HTTPException(status_code=400, detail="image_name must be provided when using image_b64.")
-    elif image_path:
-        # Load from file path, ensuring it's relative to UNPROCESSED_DIR
-        if isinstance(image_path, str):
-            image_path = Path(image_path)
-        if not image_path.is_absolute():
-            image_path = UNPROCESSED_DIR / image_path
-        image = cv2.imread(str(image_path))
-        if image is None:
-            raise HTTPException(status_code=400, detail=f"Could not load image from path: {image_path}")
-        image_name = image_path.name
-    else:
-        raise HTTPException(status_code=400, detail="No valid image source provided. Must provide file, image_b64 with image_name, or image_path.")
-
-    if image is None:
-        raise HTTPException(status_code=400, detail="Invalid image data")
-    
     # Process image
-    detections = detector.process_image(image, image_name=image_name)
+    detections = detector.process_image(image)
     
     # Create annotated image
-    annotated_image = image.copy()
+    annotated = image.copy()
+    
+    # Draw detections
     for det in detections:
         bbox = det["bbox"]
         
         # Draw either rotated rectangle or polygon based on bbox type
         if "polygon_points" in bbox and bbox["polygon_points"]:
-            # Draw polygon
             points = [(p["x"], p["y"]) for p in bbox["polygon_points"]]
-            draw_polygon(annotated_image, points, (0, 255, 0), 2)
+            draw_polygon(annotated.data, points, (0, 255, 0), 2)
         else:
-            # Draw rotated rectangle
             center = (bbox["x_center"], bbox["y_center"])
             width = bbox["width"]
             height = bbox["height"]
             angle = bbox.get("rotation_angle", 0)
-            draw_rotated_rectangle(annotated_image, center, width, height, angle, (0, 255, 0), 2)
+            draw_rotated_rectangle(annotated.data, center, width, height, angle, (0, 255, 0), 2)
         
         # Add label
         label = f"{det['class_name']} ({det['confidence']:.2f})"
         if "polygon_points" in bbox and bbox["polygon_points"]:
-            # Use first point for label position
             x = int(bbox["polygon_points"][0]["x"] * image.shape[1])
             y = int(bbox["polygon_points"][0]["y"] * image.shape[0])
         else:
@@ -172,7 +108,7 @@ async def process_image(
             y = int((bbox["y_center"] - bbox["height"]/2) * image.shape[0])
         
         cv2.putText(
-            annotated_image,
+            annotated.data,
             label,
             (x, y - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
@@ -182,30 +118,21 @@ async def process_image(
         )
     
     # Save annotated image
-    annotated_path = ANNOTATED_DIR / ('annotated_' + image_name)
-    cv2.imwrite(str(annotated_path), annotated_image)
+    annotated_path = ANNOTATED_DIR / f'annotated_{image.name}'
+    annotated.save(annotated_path)
     logging.info(f"Saved annotated image to {annotated_path}")
 
-    # Save YOLO-format annotation file in the annotated directory
+    # Save YOLO-format annotation file
     annotation_txt_path = annotated_path.with_suffix('.txt')
     with open(annotation_txt_path, 'w') as f:
         for det in detections:
             bbox = det['bbox']
-            class_id = det['class_id']
-            x_center = bbox['x_center']
-            y_center = bbox['y_center']
-            width = bbox['width']
-            height = bbox['height']
-            f.write(f"{class_id} {x_center} {y_center} {width} {height}\n")
+            f.write(f"{det['class_id']} {bbox['x_center']} {bbox['y_center']} {bbox['width']} {bbox['height']}\n")
     logging.info(f"Saved annotation file to {annotation_txt_path}")
-    
-    # Convert annotated image to base64 for response
-    _, buffer = cv2.imencode('.jpg', annotated_image)
-    annotated_image_b64 = base64.b64encode(buffer).decode('utf-8')
     
     return {
         "detections": detections,
-        "annotated_image_b64": annotated_image_b64
+        "annotated_path": str(annotated_path)
     }
 
 async def detect_objects(image_name: str) -> Dict:

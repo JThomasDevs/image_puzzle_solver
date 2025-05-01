@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import requests
 
-API_URL = "http://localhost:8000/api/v1/detection/annotate/"
+API_URL = "http://localhost:8000/api/v1/detection/process"
 ANNOTATED_DIR = Path('data/images/annotated')
 UNPROCESSED_DIR = Path('data/images/unprocessed')
 
@@ -16,7 +16,7 @@ for annotated_img in ANNOTATED_DIR.iterdir():
             orig_path = UNPROCESSED_DIR / base_name
             if orig_path.exists():
                 print(f"Reprocessing {base_name}...")
-                response = requests.post(f'{API_URL}{base_name}')
+                response = requests.post(f'{API_URL}/{base_name}')
                 print(f"Status: {response.status_code}")
                 reprocessed.append(base_name)
 

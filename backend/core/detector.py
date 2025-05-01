@@ -6,6 +6,7 @@ from ultralytics import YOLO
 import logging
 import tempfile
 from math import atan2, degrees
+from .models.image import Image
 
 class ObjectDetector:
     def __init__(self):
@@ -59,67 +60,14 @@ class ObjectDetector:
             return angle
         return 0
         
-    def detect_crosswalk(self, image):
-        """Detect crosswalk using image processing techniques"""
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 50, 150)
-        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=50, maxLineGap=10)
-        
-        if lines is not None:
-            parallel_lines = []
-            for i in range(len(lines)):
-                for j in range(i+1, len(lines)):
-                    line1 = lines[i][0]
-                    line2 = lines[j][0]
-                    angle1 = np.arctan2(line1[3] - line1[1], line1[2] - line1[0])
-                    angle2 = np.arctan2(line2[3] - line2[1], line2[2] - line2[0])
-                    if abs(angle1 - angle2) < 0.1:
-                        parallel_lines.append((line1, line2))
-            
-            if parallel_lines:
-                all_points = []
-                for line1, line2 in parallel_lines:
-                    all_points.extend([(line1[0], line1[1]), (line1[2], line1[3]),
-                                     (line2[0], line2[1]), (line2[2], line2[3])])
-                
-                if all_points:
-                    points = np.array(all_points)
-                    x_min, y_min = points.min(axis=0)
-                    x_max, y_max = points.max(axis=0)
-                    
-                    height, width = image.shape[:2]
-                    x_center = (x_min + x_max) / 2 / width
-                    y_center = (y_min + y_max) / 2 / height
-                    box_width = (x_max - x_min) / width
-                    box_height = (y_max - y_min) / height
-                    
-                    return [(self.target_classes['crosswalk'], x_center, y_center, box_width, box_height)]
-        
-        return []
-        
-    def process_image(self, image_path_or_array, image_name=None):
-        """Process an image and return detections with class names
+    def process_image(self, image: Image) -> dict:
+        """Process an image and return detections
         
         Args:
-            image_path_or_array: Either a path to an image file or a numpy array containing the image
-            image_name: Optional name to use for saving the annotated image
+            image: Image object to process
         """
-        # Handle numpy array input
-        if isinstance(image_path_or_array, np.ndarray):
-            self.current_image = image_path_or_array
-            if image_name is None:
-                image_name = "annotated_image.jpg"
-        else:
-            # Handle file path input
-            if not os.path.isabs(image_path_or_array):
-                image_path_or_array = str(self.unprocessed_dir / image_path_or_array)
-            self.current_image = cv2.imread(image_path_or_array)
-            if self.current_image is None:
-                raise ValueError(f"Could not load image at {image_path_or_array}")
-            image_name = Path(image_path_or_array).name if image_name is None else image_name
-            
         # Run YOLO detection
-        results = self.model(self.current_image)
+        results = self.model(image.data)
         
         # Get YOLO detections
         detections = []
@@ -129,7 +77,7 @@ class ObjectDetector:
             
             if class_name in self.target_classes:
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
-                height, width = self.current_image.shape[:2]
+                height, width = image.data.shape[:2]
                 
                 x_center = (x1 + x2) / 2 / width
                 y_center = (y1 + y2) / 2 / height
@@ -154,26 +102,10 @@ class ObjectDetector:
                     },
                     'confidence': float(box.conf[0])
                 })
-        
-        # Add crosswalk detections
-        crosswalk_detections = self.detect_crosswalk(self.current_image)
-        for det in crosswalk_detections:
-            detections.append({
-                'class_id': det[0],
-                'class_name': self.get_class_name(det[0]),
-                'bbox': {
-                    'x_center': det[1],
-                    'y_center': det[2],
-                    'width': det[3],
-                    'height': det[4],
-                    'rotation_angle': 0
-                },
-                'confidence': 1.0
-            })
             
         # Create annotated image
-        annotated_image = self.current_image.copy()
-        height, width = annotated_image.shape[:2]
+        annotated = image.copy()
+        height, width = annotated.data.shape[:2]
         
         # Draw all detections
         for det in detections:
@@ -189,17 +121,17 @@ class ObjectDetector:
             y2 = int(y_center + box_height/2)
             
             # Draw rectangle
-            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(annotated.data, (x1, y1), (x2, y2), (0, 255, 0), 2)
             
             # Add label with confidence
             label = f"{det['class_name']} ({det['confidence']:.2f})"
             label_y = max(20, y1 - 10)  # Keep label at least 20px from top
-            cv2.putText(annotated_image, label, (x1, label_y), 
+            cv2.putText(annotated.data, label, (x1, label_y), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         
-        # Save annotated image in the annotated directory
-        annotated_path = self.annotated_dir / ('annotated_' + image_name)
-        cv2.imwrite(str(annotated_path), annotated_image)
+        # Save annotated image
+        annotated_path = self.annotated_dir / f'annotated_{image.name}'
+        annotated.save(annotated_path)
         logging.info(f"Saved annotated image to {annotated_path}")
         
         return detections
